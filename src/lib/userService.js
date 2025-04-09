@@ -239,7 +239,7 @@ async function generateUserToken(userData, userId) {
   return token;
 }
 
-export async function cancelReservation(reservationId) {
+export async function cancelReservation(reservationId, cancellationReason = 'User requested cancellation') {
   try {
     // First get the reservation data to get the slot_id
     const { data: reservation, error: fetchError } = await adminSupabase
@@ -279,13 +279,16 @@ export async function cancelReservation(reservationId) {
 
     // Send cancellation email
     if (reservation) {
+      console.log('Sending cancellation email for reservation:', reservation);
       await sendCancellationEmail({
         userData: {
           name: reservation.user_name,
-          email: reservation.user_email
+          email: reservation.user_email,
+          groupId: reservation.group_id
         },
         slot: reservation.slots,
-        reference: reservation.reference
+        reference: reservation.reference,
+        cancellationReason: cancellationReason // This will be passed as 'reason' to the template
       });
     }
 

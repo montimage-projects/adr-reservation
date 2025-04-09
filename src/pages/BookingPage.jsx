@@ -163,19 +163,34 @@ export default function BookingPage() {
         userData: formData,
         slot: selectedSlot,
         reference: reservationData.reference
-      }
+      };
 
-      // Don't await this - we don't want to block the UI if email sending is slow
-      sendBookingConfirmationEmail(bookingData)
+      // Use Promise.race to set a timeout for email sending
+      // This ensures we don't block the UI but still handle errors appropriately
+      const emailTimeout = new Promise(resolve => {
+        setTimeout(() => {
+          resolve({ success: true, delayed: true });
+        }, 3000); // 3 second timeout
+      });
+
+      // Start email sending in background but don't wait for it
+      Promise.race([sendBookingConfirmationEmail(bookingData), emailTimeout])
         .then(emailResult => {
+          if (emailResult.delayed) {
+            console.log('Email confirmation is taking longer than expected, continuing in background');
+            // The actual email sending continues in the background
+            return;
+          }
+          
           if (!emailResult.success) {
-            console.warn('Confirmation email could not be sent:', emailResult.error)
+            console.warn('Confirmation email could not be sent:', emailResult.error);
+            // We could show a toast notification here if needed
           } else {
-            console.log('Confirmation email sent successfully')
+            console.log('Confirmation email sent successfully');
           }
         })
         .catch(err => {
-          console.error('Error sending confirmation email:', err)
+          console.error('Error sending confirmation email:', err);
         })
 
       // Store the confirmed booking details for calendar integration

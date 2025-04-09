@@ -75,8 +75,9 @@ VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
 VITE_SUPABASE_SERVICE_KEY=your-service-role-key
 VITE_JWT_SECRET=your-jwt-secret
 VITE_EMAILJS_SERVICE_ID=
-VITE_EMAILJS_TEMPLATE_ID=
 VITE_EMAILJS_PUBLIC_KEY=
+VITE_EMAILJS_CANCELLATION_TEMPLATE_ID=adr_reservation_cancel
+VITE_EMAILJS_CONFIRMATION_TEMPLATE_ID=adr_reservation_confirm
 ```
 
 ## 🏗️ Project Structure

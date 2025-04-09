@@ -35,6 +35,8 @@ export default function UserProfilePage() {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [selectedReservation, setSelectedReservation] = useState(null);
   const [cancelling, setCancelling] = useState(false);
+  const [cancellationReason, setCancellationReason] = useState('');
+  const [feedbackMessage, setFeedbackMessage] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -103,19 +105,41 @@ export default function UserProfilePage() {
 
     setCancelling(true);
     try {
-      const result = await cancelReservation(selectedReservation.id);
+      const result = await cancelReservation(selectedReservation.id, cancellationReason);
       if (result.success) {
         // Update the reservations list
         setReservations(prev => prev.filter(r => r.id !== selectedReservation.id));
+        
+        // Show success message
+        setFeedbackMessage({
+          type: 'success',
+          text: 'Your reservation has been successfully cancelled. A confirmation email has been sent to your inbox.'
+        });
       } else {
         console.error('Failed to cancel reservation:', result.error);
+        setFeedbackMessage({
+          type: 'error',
+          text: `Failed to cancel reservation: ${result.error || 'Unknown error'}`
+        });
       }
     } catch (error) {
       console.error('Error cancelling reservation:', error);
+      setFeedbackMessage({
+        type: 'error',
+        text: `Error cancelling reservation: ${error.message || 'Unknown error'}`
+      });
     } finally {
       setCancelling(false);
       setCancelDialogOpen(false);
       setSelectedReservation(null);
+      setCancellationReason('');
+      
+      // Auto-hide feedback message after 5 seconds
+      if (feedbackMessage) {
+        setTimeout(() => {
+          setFeedbackMessage(null);
+        }, 5000);
+      }
     }
   };
 
@@ -134,6 +158,42 @@ export default function UserProfilePage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
+      {feedbackMessage && (
+        <div 
+          className={`mb-4 p-4 rounded-md ${feedbackMessage.type === 'success' ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'}`}
+          role="alert"
+        >
+          <div className="flex">
+            <div className="flex-shrink-0">
+              {feedbackMessage.type === 'success' ? (
+                <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+              ) : (
+                <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              )}
+            </div>
+            <div className="ml-3">
+              <p className="text-sm">{feedbackMessage.text}</p>
+            </div>
+            <div className="ml-auto pl-3">
+              <div className="-mx-1.5 -my-1.5">
+                <button
+                  onClick={() => setFeedbackMessage(null)}
+                  className="inline-flex rounded-md p-1.5 text-gray-500 hover:bg-gray-100 focus:outline-none"
+                >
+                  <span className="sr-only">Dismiss</span>
+                  <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <Card className="max-w-4xl mx-auto mb-6">
         <CardHeader
           floated={false}
@@ -461,12 +521,27 @@ export default function UserProfilePage() {
               {selectedReservation && formatDateTime(new Date(selectedReservation.slots.start_time))}
             </Typography>
           </div>
+          <div className="mt-4">
+            <Typography variant="small" className="text-gray-500 dark:text-gray-400">
+              Reason for Cancellation (Optional)
+            </Typography>
+            <textarea
+              value={cancellationReason}
+              onChange={(e) => setCancellationReason(e.target.value)}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2"
+              rows={3}
+              placeholder="Please let us know why you're cancelling this reservation..."
+            />
+          </div>
         </DialogBody>
         <DialogFooter className="gap-2">
           <Button
             variant="text"
             color="gray"
-            onClick={() => setCancelDialogOpen(false)}
+            onClick={() => {
+              setCancelDialogOpen(false);
+              setCancellationReason('');
+            }}
             className="mr-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
           >
             Keep Reservation

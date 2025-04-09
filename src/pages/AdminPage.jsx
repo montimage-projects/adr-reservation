@@ -256,7 +256,7 @@ export default function AdminPage() {
 
   const handleStatusUpdateSubmit = async () => {
     if (!statusUpdateModal.reservation || !statusUpdateModal.reason.trim()) {
-      setError('Please provide a reason for the cancellation');
+      setError('Please provide a reason for the status change');
       return;
     }
 
@@ -272,23 +272,52 @@ export default function AdminPage() {
         statusUpdateModal.reason
       );
 
-      // Send notification email
-      await sendStatusUpdateEmail(
-        updatedReservation,
-        statusUpdateModal.status,
-        statusUpdateModal.reason
-      );
+      // Send notification email with better error handling
+      try {
+        const emailResult = await sendStatusUpdateEmail(
+          updatedReservation,
+          statusUpdateModal.status,
+          statusUpdateModal.reason
+        );
+
+        if (!emailResult.success) {
+          console.warn('Status update email could not be sent:', emailResult.error);
+          // Still continue with the process but notify admin about email issue
+          setSuccessMessage(
+            `Reservation has been ${statusUpdateModal.status}, but the notification email could not be sent. ` +
+            `Error: ${emailResult.error || 'Unknown error'}`
+          );
+        } else {
+          setSuccessMessage(
+            `Reservation has been ${statusUpdateModal.status}. Notification email sent successfully.`
+          );
+        }
+      } catch (emailErr) {
+        console.error('Error sending status update email:', emailErr);
+        // Still continue with the process but notify admin about email issue
+        setSuccessMessage(
+          `Reservation has been ${statusUpdateModal.status}, but the notification email could not be sent. ` +
+          `Error: ${emailErr.message || 'Unknown error'}`
+        );
+      }
 
       // Refresh reservations
       await fetchReservations();
 
-      setSuccessMessage(`Reservation has been ${statusUpdateModal.status}`);
+      // Close the modal
       setStatusUpdateModal({ isOpen: false, reservation: null, status: '', reason: '' });
     } catch (err) {
       console.error('Error updating reservation status:', err);
       setError(err.message || 'Failed to update reservation status');
     } finally {
       setIsLoading(false);
+      
+      // Auto-hide success message after 8 seconds
+      if (successMessage) {
+        setTimeout(() => {
+          setSuccessMessage('');
+        }, 8000);
+      }
     }
   };
 
