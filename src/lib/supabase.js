@@ -58,133 +58,57 @@ export async function createReservation(slotId, userData) {
 
   // Generate a unique booking reference
   const bookingReference = generateBookingReference();
+  console.log('Generated booking reference:', bookingReference);
 
-  // First try to check if the reference column exists in the reservations table
+  // Prepare reservation data
+  const reservationData = {
+    slot_id: slotId,
+    user_name: userData.name,
+    user_email: userData.email,
+    group_id: userData.groupId,
+    notes: userData.notes,
+    status: 'confirmed',
+    reference: bookingReference // Explicitly set the reference
+  };
+
+  console.log('Reservation data to be saved:', reservationData);
+
   try {
-    // Prepare reservation data with or without reference based on schema
-    let reservationData = {
-      slot_id: slotId,
-      user_name: userData.name,
-      user_email: userData.email,
-      group_id: userData.groupId,
-      notes: userData.notes,
-      status: 'confirmed' // Set status as confirmed by default
-    };
-
-    // Try to add the reference field - will be ignored if column doesn't exist
-    try {
-      reservationData.reference = bookingReference;
-    } catch (err) {
-      console.warn('Unable to add reference to reservation data:', err);
-    }
-
     // First create the reservation
-    const { data, error } = await supabase
+    const { data, error } = await adminSupabase
       .from('reservations')
       .insert([reservationData])
-      .select();
+      .select('*, slots(*)');
 
     if (error) {
-      // If hit RLS issue with reservations, try using admin client
-      if (error.code === '42501') {
-        const { data: adminData, error: adminError } = await adminSupabase
-          .from('reservations')
-          .insert([reservationData])
-          .select();
-
-        if (adminError) throw adminError;
-
-        // After creating a reservation with admin client, update the slot's availability
-        const { error: updateError } = await adminSupabase
-          .from('slots')
-          .update({ is_available: false })
-          .eq('id', slotId);
-
-        if (updateError) throw updateError;
-
-        // Return the data with the reference (even if it's not saved in the database)
-        return {
-          ...adminData[0],
-          reference: bookingReference // Add the reference here since we'll use it for emails
-        };
-      } else {
-        throw error;
-      }
+      console.error('Error creating reservation:', error);
+      throw error;
     }
 
-    // After creating a reservation, update the slot's availability using admin client
+    console.log('Reservation created successfully:', data[0]);
+
+    // After creating a reservation, update the slot's availability
     const { error: updateError } = await adminSupabase
       .from('slots')
       .update({ is_available: false })
       .eq('id', slotId);
 
-    if (updateError) throw updateError;
-
-    // Return the data with the reference (even if it's not saved in the database)
-    return {
-      ...data[0],
-      reference: bookingReference // Add the reference here since we'll use it for emails
-    };
-  } catch (err) {
-    console.error('Error creating reservation:', err);
-    // Fallback approach - if we get a column error, try without the reference field
-    if (err.message && (err.message.includes('column') || err.message.includes('reference'))) {
-      return createReservationWithoutReference(slotId, userData, bookingReference);
+    if (updateError) {
+      console.error('Error updating slot availability:', updateError);
+      throw updateError;
     }
-    throw err;
-  }
-}
 
-// Fallback function that creates a reservation without the reference column
-async function createReservationWithoutReference(slotId, userData, bookingReference) {
-  try {
-    const reservationData = {
-      slot_id: slotId,
-      user_name: userData.name,
-      user_email: userData.email,
-      group_id: userData.groupId,
-      notes: userData.notes,
-      status: 'confirmed' // Set status as confirmed by default
-      // Explicitly not including reference field
-    };
-
-    // Try using admin client first as it's more likely to succeed
-    if (adminSupabase) {
-      const { data, error } = await adminSupabase
-        .from('reservations')
-        .insert([reservationData])
-        .select();
-
-      if (error) throw error;
-
-      // Update slot availability
-      const { error: updateError } = await adminSupabase
-        .from('slots')
-        .update({ is_available: false })
-        .eq('id', slotId);
-
-      if (updateError) throw updateError;
-
-      return {
-        ...data[0],
-        reference: bookingReference // Add reference for email, even if not in database
-      };
-    } else {
-      // Fallback to regular client
-      const { data, error } = await supabase
-        .from('reservations')
-        .insert([reservationData])
-        .select();
-
-      if (error) throw error;
-
-      return {
-        ...data[0],
-        reference: bookingReference
-      };
+    // Double check the reference is in the returned data
+    const reservation = data[0];
+    if (!reservation.reference) {
+      console.warn('Reference not found in returned data, adding it manually');
+      reservation.reference = bookingReference;
     }
+
+    console.log('Final reservation data to be returned:', reservation);
+    return reservation;
   } catch (err) {
-    console.error('Error in fallback reservation creation:', err);
+    console.error('Error in createReservation:', err);
     throw err;
   }
 }

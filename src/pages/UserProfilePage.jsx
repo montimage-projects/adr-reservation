@@ -58,6 +58,10 @@ export default function UserProfilePage() {
             const processedReservations = result.reservations.map(reservation => {
               // Check if reservation.slots exists and has the expected structure
               if (reservation.slots && typeof reservation.slots === 'object') {
+                // Ensure reference is included
+                if (!reservation.reference) {
+                  console.warn('Reservation missing reference:', reservation.id);
+                }
                 return reservation;
               } else {
                 console.error('Unexpected slots data format:', reservation.slots);

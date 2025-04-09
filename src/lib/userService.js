@@ -1,5 +1,6 @@
 import { supabase, adminSupabase } from './supabase';
 import * as jose from 'jose';
+import { sendCancellationEmail } from './emailService';
 
 // Secret key for JWT signing - in production, use an environment variable
 const JWT_SECRET = import.meta.env.VITE_JWT_SECRET || 'user-secret-key';
@@ -240,14 +241,52 @@ async function generateUserToken(userData, userId) {
 
 export async function cancelReservation(reservationId) {
   try {
-    const { data, error } = await supabase
+    // First get the reservation data to get the slot_id
+    const { data: reservation, error: fetchError } = await adminSupabase
+      .from('reservations')
+      .select('*, slots(*)')
+      .eq('id', reservationId)
+      .single();
+
+    if (fetchError) {
+      console.error('Error fetching reservation:', fetchError);
+      return { success: false, error: fetchError.message };
+    }
+
+    // Delete the reservation
+    const { error: deleteError } = await adminSupabase
       .from('reservations')
       .delete()
       .eq('id', reservationId);
 
-    if (error) {
-      console.error('Error cancelling reservation:', error);
-      return { success: false, error: error.message };
+    if (deleteError) {
+      console.error('Error cancelling reservation:', deleteError);
+      return { success: false, error: deleteError.message };
+    }
+
+    // Reset the slot availability
+    if (reservation.slot_id) {
+      const { error: updateError } = await adminSupabase
+        .from('slots')
+        .update({ is_available: true })
+        .eq('id', reservation.slot_id);
+
+      if (updateError) {
+        console.error('Error resetting slot availability:', updateError);
+        // Don't return error here as the reservation was already deleted
+      }
+    }
+
+    // Send cancellation email
+    if (reservation) {
+      await sendCancellationEmail({
+        userData: {
+          name: reservation.user_name,
+          email: reservation.user_email
+        },
+        slot: reservation.slots,
+        reference: reservation.reference
+      });
     }
 
     return { success: true };

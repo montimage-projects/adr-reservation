@@ -30,7 +30,7 @@ CREATE TABLE reservations (
     user_email VARCHAR NOT NULL,
     group_id VARCHAR,
     notes TEXT,
-    reference TEXT UNIQUE,
+    reference VARCHAR(255) NOT NULL DEFAULT 'N/A',
     status VARCHAR DEFAULT 'confirmed',
     status_reason TEXT,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
