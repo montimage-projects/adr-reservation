@@ -27,7 +27,6 @@
     "jose": "^6.0.10",
     "jwt-decode": "^4.0.0",
     "react": "^19.0.0",
-    "react-add-to-calendar": "^0.1.5",
     "react-dom": "^19.0.0",
     "react-redux": "^9.2.0",
     "react-router-dom": "^7.5.0",
