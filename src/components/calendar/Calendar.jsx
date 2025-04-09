@@ -51,6 +51,13 @@ function Calendar({ onSlotSelect, initialSelectedSlot }) {
       // If no slots found, you might want to indicate this
       if (!slotsData || slotsData.length === 0) {
         setError('No slots available in the database. Use the "Create Test Slots" option above. If that fails, ensure your .env.local file includes a service role key.');
+      } else {
+        // Find the first available slot
+        const firstAvailableSlot = slotsData.find(slot => slot.is_available && !isSlotDisabled(slot.start_time));
+        if (firstAvailableSlot && calendarRef.current) {
+          const slotDate = new Date(firstAvailableSlot.start_time);
+          calendarRef.current.getApi().gotoDate(slotDate);
+        }
       }
     };
 
@@ -234,8 +241,8 @@ function Calendar({ onSlotSelect, initialSelectedSlot }) {
         }}
         slotDuration="01:00:00"
         slotLabelInterval="01:00:00"
-        slotMinTime="08:00:00"
-        slotMaxTime="20:00:00"
+        slotMinTime="00:00:00"
+        slotMaxTime="24:00:00"
         allDaySlot={false}
         height="auto"
         events={events}
@@ -246,8 +253,8 @@ function Calendar({ onSlotSelect, initialSelectedSlot }) {
         nowIndicator={true}
         businessHours={{
           daysOfWeek: [1, 2, 3, 4, 5], // Monday to Friday
-          startTime: '08:00',
-          endTime: '20:00',
+          startTime: '00:00',
+          endTime: '24:00',
         }}
         selectable={true}
         unselectAuto={true}
