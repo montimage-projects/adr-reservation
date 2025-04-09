@@ -1,0 +1,164 @@
+/* Light theme (default) */
+.fc .fc-toolbar-title {
+  @apply text-gray-900;
+}
+
+.fc .fc-button {
+  @apply bg-gray-200 hover:bg-gray-300 text-gray-700 border-0 shadow-sm;
+}
+
+.fc .fc-button-primary:not(:disabled).fc-button-active,
+.fc .fc-button-primary:not(:disabled):active {
+  @apply bg-primary-600 text-white;
+}
+
+.fc .fc-daygrid-day.fc-day-today,
+.fc .fc-timegrid-col.fc-day-today {
+  @apply bg-primary-50;
+}
+
+.fc .fc-col-header-cell-cushion {
+  @apply text-gray-700;
+}
+
+.fc .fc-timegrid-slot-label-cushion {
+  @apply text-gray-600;
+}
+
+/* Dark theme */
+.fc-theme-dark .fc-toolbar-title {
+  @apply text-gray-100;
+}
+
+.fc-theme-dark .fc-button {
+  @apply bg-gray-700 hover:bg-gray-600 text-gray-200 border-0;
+}
+
+.fc-theme-dark .fc-button-primary:not(:disabled).fc-button-active,
+.fc-theme-dark .fc-button-primary:not(:disabled):active {
+  @apply bg-primary-700 text-white;
+}
+
+.fc-theme-dark .fc-daygrid-day.fc-day-today,
+.fc-theme-dark .fc-timegrid-col.fc-day-today {
+  @apply bg-primary-900/30;
+}
+
+.fc-theme-dark .fc-col-header-cell-cushion {
+  @apply text-gray-300;
+}
+
+.fc-theme-dark .fc-timegrid-slot-label-cushion {
+  @apply text-gray-400;
+}
+
+.fc-theme-dark .fc-scrollgrid,
+.fc-theme-dark .fc-scrollgrid-section-header > th,
+.fc-theme-dark .fc-scrollgrid-section-footer > th,
+.fc-theme-dark table,
+.fc-theme-dark td,
+.fc-theme-dark th {
+  @apply border-gray-700;
+}
+
+.fc-theme-dark .fc-highlight,
+.fc-theme-dark .fc-event-selected {
+  @apply bg-primary-800/40;
+}
+
+.fc .fc-timegrid-now-indicator-line {
+  @apply border-red-500;
+}
+
+.fc-theme-dark .fc-timegrid-now-indicator-line {
+  @apply border-red-400;
+}
+
+/* Make the calendar compatible with dark mode */
+.fc-theme-dark .fc-toolbar-title,
+.fc-theme-dark .fc-col-header-cell-cushion,
+.fc-theme-dark .fc-daygrid-day-number,
+.fc-theme-dark .fc-timegrid-slot-label-cushion,
+.fc-theme-dark .fc-list-day-text,
+.fc-theme-dark .fc-list-day-side-text {
+  color: #e5e7eb; /* gray-200 */
+}
+
+.fc-theme-dark .fc-button-primary {
+  background-color: #4b5563; /* gray-600 */
+  border-color: #6b7280; /* gray-500 */
+  color: #e5e7eb; /* gray-200 */
+}
+
+.fc-theme-dark .fc-button-primary:not(:disabled):hover {
+  background-color: #374151; /* gray-700 */
+}
+
+.fc-theme-dark .fc-button-primary:not(:disabled).fc-button-active,
+.fc-theme-dark .fc-button-primary:not(:disabled):active {
+  background-color: #374151; /* gray-700 */
+  border-color: #4b5563; /* gray-600 */
+}
+
+.fc-theme-dark .fc-day-today {
+  background-color: rgba(55, 65, 81, 0.3) !important; /* gray-700 with reduced opacity */
+}
+
+.fc-theme-dark .fc-cell-shaded,
+.fc-theme-dark .fc-list-day-cushion {
+  background-color: #374151; /* gray-700 */
+}
+
+.fc-theme-dark .fc-list-event:hover td {
+  background-color: #4b5563; /* gray-600 */
+}
+
+.fc-theme-dark .fc-list-empty {
+  background-color: #1f2937; /* gray-800 */
+  color: #e5e7eb; /* gray-200 */
+}
+
+.fc-theme-dark .fc-popover {
+  background-color: #1f2937; /* gray-800 */
+  border-color: #4b5563; /* gray-600 */
+}
+
+.fc-theme-dark .fc-popover-header {
+  background-color: #374151; /* gray-700 */
+  color: #e5e7eb; /* gray-200 */
+}
+
+/* Improve event clickability */
+.fc-event {
+  cursor: pointer !important;
+  transition: transform 0.1s ease-in-out, box-shadow 0.1s ease-in-out;
+}
+
+.fc-event:hover {
+  transform: scale(1.02);
+  z-index: 10 !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* Make sure events are high enough to be clickable */
+.fc-timegrid-event {
+  min-height: 25px !important;
+}
+
+/* Fix pointer issue on time slots */
+.fc-timegrid-slot {
+  cursor: pointer;
+}
+
+/* Improve visibility of available slots */
+.fc-event.fc-event-start.fc-event-end.fc-event-future {
+  opacity: 1 !important;
+  font-weight: 500;
+}
+
+/* Make event text more visible */
+.fc-event-title,
+.fc-event-time {
+  font-weight: 500;
+  text-shadow: 0 0 1px rgba(0, 0, 0, 0.2);
+}
