@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react'
-import { useSearchParams, useNavigate } from 'react-router-dom'
-import { createReservation, verifySlotAvailability } from '../lib/supabase'
+import { useSearchParams, useNavigate, Link } from 'react-router-dom'
+import { createReservation, verifySlotAvailability, getUserReservationCount } from '../lib/supabase'
 import { registerUser, getCurrentUser } from '../lib/userService'
 import { sendBookingConfirmationEmail } from '../lib/emailService'
+import { checkRateLimit, recordAttempt, formatTimeUntilReset } from '../lib/rateLimiter'
+import { validateBookingForm } from '../lib/validationUtils'
 import LoadingSpinner from '../components/LoadingSpinner'
 import Calendar from '../components/calendar/Calendar'
 import SlotSelector from '../components/calendar/SlotSelector'
 import CalendarIntegration from '../components/calendar/CalendarIntegration'
 import QuickBook from '../components/QuickBook'
+import HumanVerification from '../components/HumanVerification'
 import { isSlotDisabled } from '../lib/calendarUtils'
 
 export default function BookingPage() {
@@ -18,11 +21,15 @@ export default function BookingPage() {
     groupId: '',
     notes: ''
   })
+  const [formErrors, setFormErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState(null)
   const [submitSuccess, setSubmitSuccess] = useState(false)
   const [confirmedBooking, setConfirmedBooking] = useState(null)
   const [isQuickLoading, setIsQuickLoading] = useState(false)
+  const [isHumanVerified, setIsHumanVerified] = useState(false)
+  const [rateLimitInfo, setRateLimitInfo] = useState(null)
+  const [userReservationCount, setUserReservationCount] = useState(null)
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
 
@@ -36,6 +43,11 @@ export default function BookingPage() {
         email: userData.email || '',
         groupId: userData.groupId || ''
       }))
+      
+      // Check reservation count if email is available
+      if (userData.email) {
+        checkUserReservationCount(userData.email)
+      }
     }
   }, [])
 
@@ -117,19 +129,89 @@ export default function BookingPage() {
   }
 
   const handleInputChange = (e) => {
-    const { id, value } = e.target
-    setFormData(prev => ({
-      ...prev,
-      [id]: value
-    }))
+    const { name, value } = e.target
+    setFormData(prev => ({ ...prev, [name]: value }))
+    
+    // Clear error for this field when user types
+    if (formErrors[name]) {
+      setFormErrors(prev => {
+        const newErrors = { ...prev }
+        delete newErrors[name]
+        return newErrors
+      })
+    }
+    
+    // Check reservation count when email changes
+    if (name === 'email' && value.trim() !== '') {
+      checkUserReservationCount(value)
+    }
+  }
+  
+  // Check how many reservations the user already has
+  const checkUserReservationCount = async (email) => {
+    if (!email || email.trim() === '') return
+    
+    try {
+      const result = await getUserReservationCount(email)
+      if (result.success) {
+        console.log('User reservation count:', result) // Debug log
+        setUserReservationCount(result)
+      }
+    } catch (error) {
+      console.error('Error checking user reservation count:', error)
+    }
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setSubmitting(true)
     setSubmitError(null)
+    setFormErrors({})
 
     try {
+      // Validate form inputs
+      const validation = validateBookingForm(formData)
+      if (!validation.success) {
+        setSubmitError(validation.error)
+        setFormErrors({ [validation.field]: validation.error })
+        setSubmitting(false)
+        return
+      }
+      
+      // Check if human verification is completed
+      if (!isHumanVerified) {
+        setSubmitError('Please complete the human verification challenge before booking.')
+        setSubmitting(false)
+        return
+      }
+      
+      // Check rate limiting based on email
+      if (formData.email) {
+        const rateLimit = checkRateLimit(formData.email)
+        setRateLimitInfo(rateLimit)
+        
+        if (rateLimit.limited) {
+          const resetTime = formatTimeUntilReset(rateLimit.timeUntilReset)
+          setSubmitError(
+            `You've reached the maximum number of booking attempts. Please try again in ${resetTime}.`
+          )
+          setSubmitting(false)
+          return
+        }
+        
+        // Check if user already has an active reservation
+        const reservationCount = await getUserReservationCount(formData.email)
+        setUserReservationCount(reservationCount)
+        
+        if (reservationCount.success && reservationCount.count >= 1) {
+          setSubmitError(
+            'You already have an active reservation. Please cancel your existing reservation before making a new one. You can manage your reservations in your profile page.'
+          )
+          setSubmitting(false)
+          return
+        }
+      }
+      
       // First, verify the slot is still available
       const isAvailable = await verifySlotAvailability(selectedSlot.id)
 
@@ -147,6 +229,11 @@ export default function BookingPage() {
         name: formData.name,
         email: formData.email,
         groupId: formData.groupId
+      }
+
+      // Record this attempt for rate limiting
+      if (formData.email) {
+        recordAttempt(formData.email)
       }
 
       const registrationResult = await registerUser(userData)
@@ -287,6 +374,14 @@ export default function BookingPage() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
+      {rateLimitInfo && rateLimitInfo.remainingAttempts < 3 && !rateLimitInfo.limited && (
+        <div className="mb-4 p-4 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded-md">
+          <p className="text-sm text-yellow-600 dark:text-yellow-400">
+            <strong>Note:</strong> You have {rateLimitInfo.remainingAttempts} booking {rateLimitInfo.remainingAttempts === 1 ? 'attempt' : 'attempts'} remaining. 
+            Please ensure your booking details are correct before submitting.
+          </p>
+        </div>
+      )}
       <div className="border-b border-gray-200 dark:border-gray-700 pb-5 mb-8">
         <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Book a Slot</h2>
         <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
@@ -336,16 +431,20 @@ export default function BookingPage() {
                 <form id="booking-form" onSubmit={handleSubmit} className="space-y-4">
                   <div>
                     <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                      Name
+                      Full Name
                     </label>
                     <input
                       type="text"
                       id="name"
-                      required
+                      name="name"
                       value={formData.name}
                       onChange={handleInputChange}
-                      className="input"
+                      required
+                      className={`input ${formErrors.name ? 'border-red-500 dark:border-red-400' : ''}`}
                     />
+                    {formErrors.name && (
+                      <p className="mt-1 text-sm text-red-600 dark:text-red-400">{formErrors.name}</p>
+                    )}
                   </div>
                   <div>
                     <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -354,37 +453,85 @@ export default function BookingPage() {
                     <input
                       type="email"
                       id="email"
-                      required
+                      name="email"
                       value={formData.email}
                       onChange={handleInputChange}
-                      className="input"
+                      required
+                      className={`input ${formErrors.email ? 'border-red-500 dark:border-red-400' : ''}`}
                     />
+                    {formErrors.email && (
+                      <p className="mt-1 text-sm text-red-600 dark:text-red-400">{formErrors.email}</p>
+                    )}
+                    {userReservationCount && userReservationCount.success && (
+                      <div>
+                        <p className={`mt-1 text-sm ${userReservationCount.count >= 1 ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                          {userReservationCount.count === 0 
+                            ? 'No active reservations' 
+                            : `You already have ${userReservationCount.count} active ${userReservationCount.count === 1 ? 'reservation' : 'reservations'} (maximum: 1)`}
+                        </p>
+                        {userReservationCount.count >= 1 && (
+                          <div className="mt-2">
+                            <Link 
+                              to="/profile" 
+                              className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:bg-blue-500 dark:hover:bg-blue-600"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                              </svg>
+                              View & Manage Your Reservations
+                            </Link>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label htmlFor="groupId" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                      Group ID
+                      Group ID (optional)
                     </label>
                     <input
                       type="text"
                       id="groupId"
-                      required
+                      name="groupId"
                       value={formData.groupId}
                       onChange={handleInputChange}
-                      className="input"
+                      className={`input ${formErrors.groupId ? 'border-red-500 dark:border-red-400' : ''}`}
                     />
+                    {formErrors.groupId && (
+                      <p className="mt-1 text-sm text-red-600 dark:text-red-400">{formErrors.groupId}</p>
+                    )}
                   </div>
                   <div>
                     <label htmlFor="notes" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                      Notes
+                      Notes (optional)
                     </label>
                     <textarea
                       id="notes"
-                      rows={3}
+                      name="notes"
                       value={formData.notes}
                       onChange={handleInputChange}
-                      className="input"
+                      rows={3}
+                      className={`input ${formErrors.notes ? 'border-red-500 dark:border-red-400' : ''}`}
+                      maxLength={500}
                     />
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {formData.notes.length}/500 characters
+                    </p>
+                    {formErrors.notes && (
+                      <p className="mt-1 text-sm text-red-600 dark:text-red-400">{formErrors.notes}</p>
+                    )}
                   </div>
+                  
+                  {/* Human Verification Component */}
+                  <HumanVerification 
+                    onVerificationComplete={(result) => {
+                      setIsHumanVerified(result.success);
+                      if (!result.success && result.error) {
+                        setSubmitError(result.error);
+                      }
+                    }}
+                  />
                 </form>
               </div>
 

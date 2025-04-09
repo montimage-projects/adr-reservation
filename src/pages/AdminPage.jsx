@@ -10,6 +10,8 @@ import {
 } from '../lib/authService'
 import { useNavigate, Link } from 'react-router-dom'
 import { sendStatusUpdateEmail } from '../lib/emailService'
+import VerificationSettings from '../components/admin/VerificationSettings'
+import { Tab, TabPanel, Tabs } from '../components/Tabs'
 
 export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -19,6 +21,7 @@ export default function AdminPage() {
   const [reservations, setReservations] = useState([])
   const [availableSlots, setAvailableSlots] = useState('--')
   const [firstTimeSetup, setFirstTimeSetup] = useState(false)
+  const [activeTab, setActiveTab] = useState('dashboard')
   const [loginForm, setLoginForm] = useState({
     password: '',
     confirmPassword: ''
@@ -552,6 +555,12 @@ export default function AdminPage() {
         </div>
       ) : (
         <>
+          <Tabs defaultTab="dashboard" onChange={(tab) => setActiveTab(tab)}>
+            <Tab value="dashboard">Dashboard</Tab>
+            <Tab value="reservations">Reservations</Tab>
+            <Tab value="security">Security</Tab>
+            
+            <TabPanel value="dashboard" className="py-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <div className="card">
               <div className="card-header">
@@ -595,6 +604,9 @@ export default function AdminPage() {
               </div>
             </div>
           </div>
+            </TabPanel>
+            
+            <TabPanel value="reservations" className="py-4">
 
           <div className="card">
             <div className="card-header">
@@ -761,6 +773,53 @@ export default function AdminPage() {
               {successMessage}
             </div>
           )}
+            </TabPanel>
+            
+            <TabPanel value="security" className="py-4">
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Security Settings</h2>
+                <p className="text-gray-500 dark:text-gray-400">
+                  Manage human verification and rate limiting settings for the reservation system.
+                </p>
+              </div>
+              
+              <VerificationSettings />
+              
+              <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+                  Security Information
+                </h3>
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="text-md font-medium text-gray-900 dark:text-white mb-2">
+                      Human Verification
+                    </h4>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      All users must complete a human verification challenge before making a reservation.
+                      This helps prevent automated bots from abusing the reservation system.
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <h4 className="text-md font-medium text-gray-900 dark:text-white mb-2">
+                      Rate Limiting
+                    </h4>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Users are limited to 5 booking attempts per hour to prevent abuse.
+                      Administrators can reset rate limits for specific users if needed.
+                    </p>
+                  </div>
+                  
+                  <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-md p-4">
+                    <p className="text-sm text-blue-700 dark:text-blue-400">
+                      <strong>Note:</strong> These security measures help protect the system from abuse,
+                      but should be monitored and adjusted based on user feedback and system usage patterns.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </TabPanel>
+          </Tabs>
 
           {/* Status Update Modal */}
           {statusUpdateModal.isOpen && (

@@ -239,9 +239,8 @@ export default function UserProfilePage() {
             >
               <Tab
                 value="profile"
-                className="text-sm font-medium px-6 py-3 transition-all duration-300"
+                className="text-sm font-medium px-6 py-3 transition-all duration-300 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
                 activeClassName="text-primary-600 dark:text-primary-400"
-                inactiveClassName="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
               >
                 <div className="flex items-center gap-2">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -252,9 +251,8 @@ export default function UserProfilePage() {
               </Tab>
               <Tab
                 value="reservations"
-                className="text-sm font-medium px-6 py-3 transition-all duration-300"
+                className="text-sm font-medium px-6 py-3 transition-all duration-300 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
                 activeClassName="text-primary-600 dark:text-primary-400"
-                inactiveClassName="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
               >
                 <div className="flex items-center gap-2">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">

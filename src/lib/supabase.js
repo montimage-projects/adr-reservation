@@ -421,3 +421,87 @@ export async function deleteReservation(reservationId) {
     throw err;
   }
 }
+
+/**
+ * Check how many active reservations a user has
+ * @param {string} email - User's email address
+ * @returns {Promise<Object>} - Object containing count and success flag
+ */
+export async function getUserReservationCount(email) {
+  if (!email) {
+    return { success: false, error: 'Email is required to check reservation count' };
+  }
+
+  try {
+    // Get current date in ISO format for comparison
+    const now = new Date();
+    
+    // Always try to use adminSupabase for better data access (same as in userService.js)
+    let data, error;
+    
+    if (adminSupabase) {
+      // Use admin client if available
+      console.log('Using adminSupabase to fetch reservations');
+      const result = await adminSupabase
+        .from('reservations')
+        .select(`
+          *,
+          slots (*)
+        `)
+        .eq('user_email', email.toLowerCase())
+        .eq('status', 'confirmed');
+      
+      data = result.data;
+      error = result.error;
+    } else {
+      // Fallback to regular client
+      console.log('Using regular supabase to fetch reservations');
+      const result = await supabase
+        .from('reservations')
+        .select(`
+          *,
+          slots (*)
+        `)
+        .eq('user_email', email.toLowerCase())
+        .eq('status', 'confirmed');
+      
+      data = result.data;
+      error = result.error;
+    }
+
+    if (error) {
+      console.error('Error fetching reservations:', error);
+      return { success: false, error: error.message };
+    }
+    
+    console.log('Raw reservations data for email', email, ':', data);
+    
+    // If no reservations, return early
+    if (!data || data.length === 0) {
+      return { success: true, count: 0, reservations: [] };
+    }
+    
+    // Filter to only include reservations with future slots
+    const activeReservations = data.filter(reservation => {
+      // Skip if no slot data
+      if (!reservation.slots) return false;
+      
+      // Parse the slot start time
+      const slotStartTime = new Date(reservation.slots.start_time);
+      
+      // Check if the slot is in the future
+      return slotStartTime > now;
+    });
+    
+    console.log('Active future reservations for email', email, ':', activeReservations);
+
+    return { 
+      success: true, 
+      count: activeReservations.length,
+      reservations: activeReservations 
+    };
+  } catch (err) {
+    console.error('Error in getUserReservationCount:', err);
+    return { success: false, error: err.message };
+  }
+}
