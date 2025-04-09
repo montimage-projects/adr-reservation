@@ -196,3 +196,72 @@ export async function sendCancellationEmail(bookingData) {
     };
   }
 }
+
+export async function sendStatusUpdateEmail(reservationData, status, reason = '') {
+  try {
+    if (!EMAIL_SERVICE_ID || !EMAIL_TEMPLATE_ID || !EMAIL_PUBLIC_KEY) {
+      console.warn('Email service not configured properly');
+      return {
+        success: false,
+        error: 'Email service not configured'
+      };
+    }
+
+    // Format the date and time
+    let formattedDate = 'Date not available';
+    let formattedTime = 'Time not available';
+
+    try {
+      const slot = reservationData.slots;
+      if (slot && slot.start_time) {
+        const bookingDate = new Date(slot.start_time);
+        if (!isNaN(bookingDate.getTime())) {
+          formattedDate = bookingDate.toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          });
+
+          formattedTime = bookingDate.toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+          });
+        }
+      }
+    } catch (dateError) {
+      console.error('Error formatting date for email:', dateError);
+    }
+
+    // Prepare email template data
+    const templateParams = {
+      to_name: reservationData.user_name,
+      to_email: reservationData.user_email,
+      booking_reference: reservationData.reference || 'N/A',
+      booking_date: formattedDate,
+      booking_time: formattedTime,
+      status: status.charAt(0).toUpperCase() + status.slice(1),
+      status_reason: reason || 'No reason provided',
+      group_id: reservationData.group_id || 'N/A'
+    };
+
+    // Send the email
+    const result = await emailjs.send(
+      EMAIL_SERVICE_ID,
+      EMAIL_TEMPLATE_ID,
+      templateParams
+    );
+
+    return {
+      success: true,
+      result
+    };
+  } catch (err) {
+    console.error('Error sending status update email:', err);
+    return {
+      success: false,
+      error: err.message
+    };
+  }
+}

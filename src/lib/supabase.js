@@ -67,7 +67,8 @@ export async function createReservation(slotId, userData) {
       user_name: userData.name,
       user_email: userData.email,
       group_id: userData.groupId,
-      notes: userData.notes
+      notes: userData.notes,
+      status: 'confirmed' // Set status as confirmed by default
     };
 
     // Try to add the reference field - will be ignored if column doesn't exist
@@ -142,7 +143,8 @@ async function createReservationWithoutReference(slotId, userData, bookingRefere
       user_name: userData.name,
       user_email: userData.email,
       group_id: userData.groupId,
-      notes: userData.notes
+      notes: userData.notes,
+      status: 'confirmed' // Set status as confirmed by default
       // Explicitly not including reference field
     };
 
@@ -429,4 +431,69 @@ export async function deleteSlot(slotId) {
     .eq('id', slotId);
 
   if (error) throw error;
+}
+
+export async function updateReservationStatus(reservationId, status, reason = '') {
+  if (!adminSupabase) {
+    throw new Error('Admin access is required to update reservation status. Service key not configured.');
+  }
+
+  try {
+    const { data, error } = await adminSupabase
+      .from('reservations')
+      .update({
+        status,
+        status_reason: reason,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', reservationId)
+      .select(`
+        *,
+        slots (*)
+      `);
+
+    if (error) throw error;
+    return data[0];
+  } catch (err) {
+    console.error('Error updating reservation status:', err);
+    throw err;
+  }
+}
+
+export async function deleteReservation(reservationId) {
+  if (!adminSupabase) {
+    throw new Error('Admin access is required to delete reservations. Service key not configured.');
+  }
+
+  try {
+    // First get the reservation data for notification
+    const { data: reservation, error: fetchError } = await adminSupabase
+      .from('reservations')
+      .select(`
+        *,
+        slots (*)
+      `)
+      .eq('id', reservationId)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    // Delete the reservation
+    const { error: deleteError } = await adminSupabase
+      .from('reservations')
+      .delete()
+      .eq('id', reservationId);
+
+    if (deleteError) throw deleteError;
+
+    // Reset slot availability
+    if (reservation.slot_id) {
+      await resetSlotAvailability(reservation.slot_id);
+    }
+
+    return reservation;
+  } catch (err) {
+    console.error('Error deleting reservation:', err);
+    throw err;
+  }
 }
