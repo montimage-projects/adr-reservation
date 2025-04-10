@@ -1,53 +1,117 @@
 import * as jose from 'jose';
+import { adminSupabase } from './supabase';
 
 // Secret key for JWT signing - in production, use an environment variable
 const JWT_SECRET = import.meta.env.VITE_JWT_SECRET || 'admin-secret-key';
 
-// Store for first-time setup state
-const AUTH_STATE_KEY = 'admin_auth_state';
+// Store for auth token
 const TOKEN_KEY = 'admin_token';
+
+// Settings key for admin password hash in database
 const ADMIN_PASSWORD_KEY = 'admin_password_hash';
 
-// For simplicity, we're storing the password hash in localStorage
-// In a real app, this would be stored in a database
-export function isFirstTimeSetup() {
-  return !localStorage.getItem(ADMIN_PASSWORD_KEY);
+// Check if admin password has been set up in the database
+export async function isFirstTimeSetup() {
+  try {
+    if (!adminSupabase) {
+      console.error('Admin Supabase client not available');
+      return true; // Assume first-time setup if no admin client
+    }
+    
+    const { data, error } = await adminSupabase
+      .from('settings')
+      .select('value')
+      .eq('key', ADMIN_PASSWORD_KEY)
+      .single();
+    
+    if (error) {
+      console.error('Error checking admin password:', error);
+      return true;
+    }
+    
+    // If value is empty string, it means password hasn't been set
+    return !data || !data.value;
+  } catch (err) {
+    console.error('Error in isFirstTimeSetup:', err);
+    return true;
+  }
 }
 
-export function setupAdminPassword(password) {
-  // In a real application, use a proper hashing library like bcrypt
-  // For this demo, we'll use a simple hash function
-  const hashedPassword = hashPassword(password);
-  localStorage.setItem(ADMIN_PASSWORD_KEY, hashedPassword);
-  localStorage.setItem(AUTH_STATE_KEY, 'setup_complete');
-  return true;
+export async function setupAdminPassword(password) {
+  try {
+    if (!adminSupabase) {
+      console.error('Admin Supabase client not available');
+      return false;
+    }
+    
+    // In a real application, use a proper hashing library like bcrypt
+    // For this demo, we'll use a simple hash function
+    const hashedPassword = hashPassword(password);
+    
+    // Update the admin password hash in the settings table
+    const { error } = await adminSupabase
+      .from('settings')
+      .update({ value: hashedPassword, updated_at: new Date().toISOString() })
+      .eq('key', ADMIN_PASSWORD_KEY);
+    
+    if (error) {
+      console.error('Error setting admin password:', error);
+      return false;
+    }
+    
+    return true;
+  } catch (err) {
+    console.error('Error in setupAdminPassword:', err);
+    return false;
+  }
 }
 
 export async function loginAdmin(password) {
-  const storedHash = localStorage.getItem(ADMIN_PASSWORD_KEY);
-
-  if (!storedHash) {
-    return { success: false, message: 'Admin account not set up' };
+  try {
+    if (!adminSupabase) {
+      console.error('Admin Supabase client not available');
+      return { success: false, message: 'Admin access not available' };
+    }
+    
+    // Get the stored password hash from the database
+    const { data, error } = await adminSupabase
+      .from('settings')
+      .select('value')
+      .eq('key', ADMIN_PASSWORD_KEY)
+      .single();
+    
+    if (error) {
+      console.error('Error retrieving admin password:', error);
+      return { success: false, message: 'Error retrieving admin credentials' };
+    }
+    
+    if (!data || !data.value) {
+      return { success: false, message: 'Admin account not set up' };
+    }
+    
+    const storedHash = data.value;
+    const hashedPassword = hashPassword(password);
+    
+    if (hashedPassword === storedHash) {
+      // Generate JWT token using jose library (browser compatible)
+      const secret = new TextEncoder().encode(JWT_SECRET);
+      const token = await new jose.SignJWT({ role: 'admin' })
+        .setProtectedHeader({ alg: 'HS256' })
+        .setIssuedAt()
+        .setExpirationTime('1h')
+        .sign(secret);
+      
+      // Store token in localStorage
+      localStorage.setItem(TOKEN_KEY, token);
+      
+      return { success: true, token };
+    }
+    
+    return { success: false, message: 'Invalid password' };
+  } catch (err) {
+    console.error('Error in loginAdmin:', err);
+    return { success: false, message: 'Authentication error' };
   }
-
-  const hashedPassword = hashPassword(password);
-
-  if (hashedPassword === storedHash) {
-    // Generate JWT token using jose library (browser compatible)
-    const secret = new TextEncoder().encode(JWT_SECRET);
-    const token = await new jose.SignJWT({ role: 'admin' })
-      .setProtectedHeader({ alg: 'HS256' })
-      .setIssuedAt()
-      .setExpirationTime('1h')
-      .sign(secret);
-
-    // Store token in localStorage
-    localStorage.setItem(TOKEN_KEY, token);
-
-    return { success: true, token };
-  }
-
-  return { success: false, message: 'Invalid password' };
 }
 
 export function logoutAdmin() {

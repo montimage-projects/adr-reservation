@@ -47,18 +47,19 @@ export default function AdminPage() {
   useEffect(() => {
     const checkAuth = async () => {
       setIsCheckingAuth(true)
-      // Check if this is the first time setup
-      const isFirstTime = isFirstTimeSetup()
-
-      // Check if the user is already authenticated
       try {
+        // Check if this is the first time setup - now async
+        const isFirstTime = await isFirstTimeSetup()
+        
+        // Check if the user is already authenticated
         const isAuth = await isAdminAuthenticated()
         setIsAuthenticated(isAuth)
         setFirstTimeSetup(isFirstTime)
       } catch (error) {
         console.error('Error checking auth:', error)
         setIsAuthenticated(false)
-        setFirstTimeSetup(isFirstTime)
+        // Default to first-time setup if there's an error
+        setFirstTimeSetup(true)
       } finally {
         setIsCheckingAuth(false)
       }
@@ -190,56 +191,74 @@ export default function AdminPage() {
 
   const handleSetupSubmit = async (e) => {
     e.preventDefault()
+    setIsLoading(true)
     setFormError('')
-
-    const { password, confirmPassword } = loginForm
-
-    // Validate password
-    if (password.length < 8) {
-      setFormError('Password must be at least 8 characters long')
-      return
-    }
-
-    if (password !== confirmPassword) {
-      setFormError('Passwords do not match')
-      return
-    }
+    setSuccessMessage('')
 
     try {
-      // Setup admin password
-      setupAdminPassword(password)
+      // Validate password
+      if (loginForm.password.length < 8) {
+        setFormError('Password must be at least 8 characters')
+        setIsLoading(false)
+        return
+      }
 
-      // Login automatically after setup
-      const result = await loginAdmin(password)
-      if (result.success) {
-        setFirstTimeSetup(false)
+      // Validate password confirmation
+      if (loginForm.password !== loginForm.confirmPassword) {
+        setFormError('Passwords do not match')
+        setIsLoading(false)
+        return
+      }
+
+      // Set up admin password - now returns success boolean
+      const success = await setupAdminPassword(loginForm.password)
+      
+      if (success) {
+        setSuccessMessage('Admin account created successfully!')
         setIsAuthenticated(true)
+        setFirstTimeSetup(false)
+
+        // Reset form
+        setLoginForm({
+          password: '',
+          confirmPassword: ''
+        })
       } else {
-        setFormError('Error setting up admin account')
+        setFormError('Error setting up admin account. Please try again.')
       }
     } catch (error) {
-      console.error('Setup error:', error)
-      setFormError('Error setting up: ' + error.message)
+      console.error('Error setting up admin:', error)
+      setFormError('Error setting up admin account: ' + error.message)
+    } finally {
+      setIsLoading(false)
     }
   }
 
   const handleLoginSubmit = async (e) => {
     e.preventDefault()
+    setIsLoading(true)
     setFormError('')
 
     const { password } = loginForm
 
     try {
-      // Login
+      // Login with database-backed authentication
       const result = await loginAdmin(password)
       if (result.success) {
         setIsAuthenticated(true)
+        // Reset form
+        setLoginForm(prev => ({
+          ...prev,
+          password: ''
+        }))
       } else {
         setFormError(result.message || 'Invalid password')
       }
     } catch (error) {
       console.error('Login error:', error)
       setFormError('Login failed: ' + error.message)
+    } finally {
+      setIsLoading(false)
     }
   }
 
