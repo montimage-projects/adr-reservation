@@ -25,7 +25,6 @@
 - Calendar integration
 - Email confirmations
 - Reservation management
-- Real-time availability
 
 ### 👨‍💼 Admin Dashboard
 - Slot management
