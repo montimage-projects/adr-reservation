@@ -3,7 +3,7 @@ import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
-import { getAvailableSlots, subscribeToSlots } from '../../lib/supabase';
+import { getAvailableSlots, subscribeToSlots } from '../../lib/firebase';
 import LoadingSpinner from '../LoadingSpinner';
 import { useTheme } from '../../utils/ThemeContext';
 import './calendar.css';

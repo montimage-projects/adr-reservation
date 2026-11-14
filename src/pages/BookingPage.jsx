@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
-import { createReservation, verifySlotAvailability, getUserReservationCount } from '../lib/supabase'
+import { createReservation, verifySlotAvailability, getUserReservationCount } from '../lib/firebase'
 import { registerUser, getCurrentUser } from '../lib/userService'
 import { sendBookingConfirmationEmail } from '../lib/emailService'
 import { checkRateLimit, recordAttempt, formatTimeUntilReset } from '../lib/rateLimiter'

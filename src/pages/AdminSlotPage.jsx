@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { isAdminAuthenticated } from '../lib/authService';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { getAvailableSlots, createSlot, deleteSlot, updateSlot } from '../lib/supabase';
+import { getAvailableSlots, createSlot, deleteSlot, updateSlot } from '../lib/firebase';
 import FullCalendar from '@fullcalendar/react';
 import { slotToCalendarEvent, isSlotDisabled, calendarConfig } from '../lib/calendarUtils';
 

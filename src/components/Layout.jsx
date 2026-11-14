@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import ThemeToggle from './ThemeToggle';
-import { getClosestAvailableSlot, checkSlotsExist, createTestSlots } from '../lib/supabase';
+import { getClosestAvailableSlot, checkSlotsExist, createTestSlots } from '../lib/firebase';
 import { isAdminAuthenticated } from '../lib/authService';
 import { isUserAuthenticated, getCurrentUser } from '../lib/userService';
 

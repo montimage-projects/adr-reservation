@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getReservations, checkSlotsExist, createTestSlots, updateReservationStatus, adminSupabase } from '../lib/supabase'
+import { getReservations, checkSlotsExist, createTestSlots, updateReservationStatus, db } from '../lib/firebase'
 import LoadingSpinner from '../components/LoadingSpinner'
 import {
   isFirstTimeSetup,

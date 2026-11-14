@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getClosestAvailableSlot, checkSlotsExist, createTestSlots } from '../lib/supabase';
+import { getClosestAvailableSlot, checkSlotsExist, createTestSlots } from '../lib/firebase';
 import LoadingSpinner from './LoadingSpinner';
 
 function QuickBook({ showTestOptions = false }) {
