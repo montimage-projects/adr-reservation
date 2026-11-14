@@ -390,7 +390,7 @@ export default function BookingPage() {
 
         {!selectedSlot && !isQuickLoading && (
           <div className="mt-4">
-            <QuickBook showTestOptions={true} />
+            <QuickBook />
           </div>
         )}
 

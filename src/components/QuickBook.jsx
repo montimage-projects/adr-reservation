@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getClosestAvailableSlot, checkSlotsExist, createTestSlots } from '../lib/firebase';
+import { getClosestAvailableSlot, checkSlotsExist } from '../lib/firebase';
 import LoadingSpinner from './LoadingSpinner';
 
-function QuickBook({ showTestOptions = false }) {
+function QuickBook() {
   const [loading, setLoading] = useState(false);
-  const [creatingSlots, setCreatingSlots] = useState(false);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
 
@@ -41,29 +40,6 @@ function QuickBook({ showTestOptions = false }) {
       console.error('Error finding closest slot:', err);
       setError('Failed to find an available slot. Please try again.');
       setLoading(false);
-    }
-  };
-
-  const handleCreateTestSlots = async () => {
-    setCreatingSlots(true);
-    setError(null);
-
-    try {
-      await createTestSlots();
-      setError('Test slots created successfully! You can now use Quick Book.');
-    } catch (err) {
-      console.error('Error creating test slots:', err);
-
-      // Handle specific error for missing service key
-      if (err.message && err.message.includes('Service key not configured')) {
-        setError('Admin permissions required. Please add a service key in your .env.local file.');
-      } else if (err.code === '42501') {
-        setError('Permission denied. The application lacks necessary database permissions.');
-      } else {
-        setError('Failed to create test slots. Please try again.');
-      }
-    } finally {
-      setCreatingSlots(false);
     }
   };
 

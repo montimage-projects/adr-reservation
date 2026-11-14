@@ -1,6 +1,6 @@
 // Firebase configuration
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, query, where, orderBy, serverTimestamp, onSnapshot, limit, Timestamp } from 'firebase/firestore';
+import { getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, query, where, orderBy, serverTimestamp, onSnapshot, limit, Timestamp, getCountFromServer } from 'firebase/firestore';
 import { getAuth, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { generateBookingReference } from './emailService';
 
@@ -249,6 +249,22 @@ export async function getClosestAvailableSlot() {
     };
   } catch (err) {
     console.error('Error getting closest available slot:', err);
+    throw err;
+  }
+}
+
+// Count future slots that are still bookable (uses the is_available + start_time index)
+export async function getAvailableSlotsCount() {
+  try {
+    const q = query(
+      collection(db, 'slots'),
+      where('start_time', '>=', toFirestoreTimestamp(new Date())),
+      where('is_available', '==', true)
+    );
+    const snapshot = await getCountFromServer(q);
+    return snapshot.data().count;
+  } catch (err) {
+    console.error('Error counting available slots:', err);
     throw err;
   }
 }

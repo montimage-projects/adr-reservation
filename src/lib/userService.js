@@ -1,5 +1,5 @@
-import { db, auth } from './firebase';
-import { collection, doc, getDoc, setDoc, updateDoc, query, where, getDocs, orderBy, addDoc, deleteDoc } from 'firebase/firestore';
+import { db } from './firebase';
+import { collection, doc, getDoc, updateDoc, query, where, getDocs, orderBy, addDoc, deleteDoc } from 'firebase/firestore';
 import * as jose from 'jose';
 import { sendCancellationEmail } from './emailService';
 

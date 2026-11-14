@@ -1,10 +1,10 @@
 import { db } from '../lib/firebase';
-import { collection, getDocs, doc, updateDoc, writeBatch } from 'firebase/firestore';
+import { collection, getDocs, doc, writeBatch } from 'firebase/firestore';
 
 /**
- * This utility helps update the Firebase schema
- * Run this script using:
- * node src/utils/updateSchema.js
+ * Backfills missing fields on existing Firestore documents.
+ * Import and call it from app code; it uses the browser Firebase client, so it
+ * cannot be run directly with node.
  */
 async function updateSchema() {
   console.log('Updating Firebase schema...');
@@ -47,15 +47,6 @@ async function updateSchema() {
   } catch (error) {
     console.error('Error updating schema:', error);
   }
-}
-
-// Only run if executed directly
-if (typeof window === 'undefined' && require.main === module) {
-  updateSchema()
-    .catch(console.error)
-    .finally(() => {
-      process.exit();
-    });
 }
 
 export default updateSchema;

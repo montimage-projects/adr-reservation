@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { isAdminAuthenticated } from '../lib/authService';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -14,22 +14,12 @@ export default function AdminSlotPage() {
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
   const [showForm, setShowForm] = useState(false);
-  const [editingSlot, setEditingSlot] = useState(null);
   const [slotForm, setSlotForm] = useState({
     startDateTime: '',
     endDateTime: '',
   });
   const [view, setView] = useState('table'); // 'table' or 'calendar'
   const calendarRef = useRef(null);
-  const [batchCreateOpen, setBatchCreateOpen] = useState(false);
-  const [batchForm, setBatchForm] = useState({
-    startDate: '',
-    endDate: '',
-    days: [1, 2, 3, 4, 5], // Default to weekdays (0=Sunday, 1=Monday, etc.)
-    startTime: '09:00',
-    endTime: '17:00',
-    slotDuration: 1, // hours
-  });
 
   const navigate = useNavigate();
 
@@ -178,42 +168,6 @@ export default function AdminSlotPage() {
     }
   };
 
-  const handleEditSlot = (slot) => {
-    // Convert ISO dates to local date and time for form
-    const startDate = new Date(slot.start_time);
-    const endDate = new Date(slot.end_time);
-
-    setSlotForm({
-      startDateTime: startDate.toISOString(),
-      endDateTime: endDate.toISOString(),
-    });
-
-    setEditingSlot(slot);
-    setShowForm(true);
-    setView('table');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleDeleteSlot = async (slotId) => {
-    if (!confirm('Are you sure you want to delete this slot?')) {
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      await deleteSlot(slotId);
-      setSuccessMessage('Slot deleted successfully');
-      await fetchSlots();
-    } catch (err) {
-      console.error('Error deleting slot:', err);
-      setError(err.message || 'Failed to delete slot. Make sure your service key is configured.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleToggleSlotAvailability = async (slot) => {
     setIsLoading(true);
     setError(null);
@@ -240,7 +194,6 @@ export default function AdminSlotPage() {
       startDateTime: '',
       endDateTime: '',
     });
-    setEditingSlot(null);
     setShowForm(false);
   };
 
@@ -264,133 +217,6 @@ export default function AdminSlotPage() {
 
   // Convert slots to calendar events
   const calendarEvents = validSlots.map(slotToCalendarEvent);
-
-  const handleBatchInputChange = (e) => {
-    const { name, value, type } = e.target;
-
-    if (name === 'days') {
-      // Handle checkboxes for days differently
-      const dayValue = parseInt(e.target.value, 10);
-      const isChecked = e.target.checked;
-
-      setBatchForm(prev => {
-        const currentDays = [...prev.days];
-        if (isChecked && !currentDays.includes(dayValue)) {
-          currentDays.push(dayValue);
-        } else if (!isChecked && currentDays.includes(dayValue)) {
-          const index = currentDays.indexOf(dayValue);
-          currentDays.splice(index, 1);
-        }
-        return { ...prev, days: currentDays };
-      });
-    } else {
-      setBatchForm(prev => ({
-        ...prev,
-        [name]: value
-      }));
-    }
-  };
-
-  const handleCreateWeeklySchedule = async (e) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError(null);
-    setSuccessMessage('');
-
-    try {
-      // Parse the date range
-      const startDate = new Date(batchForm.startDate);
-      const endDate = new Date(batchForm.endDate);
-
-      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-        throw new Error('Invalid date range');
-      }
-
-      if (endDate < startDate) {
-        throw new Error('End date must be after start date');
-      }
-
-      // Parse times
-      const [startHour, startMinute] = batchForm.startTime.split(':').map(n => parseInt(n, 10));
-      const [endHour, endMinute] = batchForm.endTime.split(':').map(n => parseInt(n, 10));
-
-      // For hourly slots, force the start time to be at the beginning of the hour
-      const adjustedStartHour = startHour;
-      // Round up the end hour if there are minutes specified
-      const adjustedEndHour = endMinute > 0 ? endHour + 1 : endHour;
-
-      // Calculate number of slots per day
-      const hoursPerDay = adjustedEndHour - adjustedStartHour;
-      if (hoursPerDay <= 0) {
-        throw new Error('End time must be after start time');
-      }
-
-      const slotsToCreate = [];
-      const currentDate = new Date(startDate);
-
-      // Loop through each day in the date range
-      while (currentDate <= endDate) {
-        const dayOfWeek = currentDate.getDay(); // 0 is Sunday, 1 is Monday, etc.
-
-        // Check if this day is selected
-        if (batchForm.days.includes(dayOfWeek)) {
-          // Set the time to the start time
-          const slotTime = new Date(currentDate);
-          // Always set minutes to 0 to ensure slots start at the beginning of the hour
-          slotTime.setHours(adjustedStartHour, 0, 0, 0);
-
-          // Create slots for each hour in the day
-          for (let hour = 0; hour < hoursPerDay; hour++) {
-            const slotStart = new Date(slotTime);
-
-            // Ensure slot starts at the beginning of the hour
-            slotStart.setMinutes(0, 0, 0);
-
-            // Add the duration to get the end time
-            const slotEnd = new Date(slotStart);
-            slotEnd.setHours(slotStart.getHours() + batchForm.slotDuration);
-
-            // Add the slot to our list
-            slotsToCreate.push({
-              start_time: slotStart.toISOString(),
-              end_time: slotEnd.toISOString(),
-              is_available: true
-            });
-
-            // Move to next slot time
-            slotTime.setHours(slotTime.getHours() + batchForm.slotDuration);
-          }
-        }
-
-        // Move to next day
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
-
-      // Confirm with user before creating a large number of slots
-      if (slotsToCreate.length > 20) {
-        if (!confirm(`You are about to create ${slotsToCreate.length} slots. Continue?`)) {
-          setIsLoading(false);
-          return;
-        }
-      }
-
-      // Create all slots in batches to avoid overwhelming the server
-      const batchSize = 10;
-      for (let i = 0; i < slotsToCreate.length; i += batchSize) {
-        const batch = slotsToCreate.slice(i, i + batchSize);
-        await Promise.all(batch.map(slot => createSlot(slot)));
-      }
-
-      setSuccessMessage(`Created ${slotsToCreate.length} slots successfully`);
-      setBatchCreateOpen(false);
-      await fetchSlots();
-    } catch (err) {
-      console.error('Error creating weekly schedule:', err);
-      setError(err.message || 'Failed to create weekly schedule. Make sure your service key is configured.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleDeleteAllSlots = async () => {
     if (!confirm('Are you sure you want to delete ALL available slots? This action cannot be undone.')) {

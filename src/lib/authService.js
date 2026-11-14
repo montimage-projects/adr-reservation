@@ -1,6 +1,6 @@
 import * as jose from 'jose';
-import { getFirestore, collection, doc, getDoc, setDoc, updateDoc, query, where, getDocs } from 'firebase/firestore';
-import { db, auth, signIn, logOut } from './firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { db, logOut } from './firebase';
 
 // Secret key for JWT signing - in production, use an environment variable
 const JWT_SECRET = import.meta.env.VITE_JWT_SECRET || 'admin-secret-key';

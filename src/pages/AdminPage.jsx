@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getReservations, checkSlotsExist, createTestSlots, updateReservationStatus, db } from '../lib/firebase'
+import { getReservations, getAvailableSlotsCount, updateReservationStatus } from '../lib/firebase'
 import LoadingSpinner from '../components/LoadingSpinner'
 import {
   isFirstTimeSetup,
@@ -8,7 +8,7 @@ import {
   logoutAdmin,
   isAdminAuthenticated
 } from '../lib/authService'
-import { useNavigate, Link } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { sendStatusUpdateEmail } from '../lib/emailService'
 import VerificationSettings from '../components/admin/VerificationSettings'
 import { Tab, TabPanel, Tabs } from '../components/Tabs'
@@ -19,16 +19,13 @@ export default function AdminPage() {
   const [isCheckingAuth, setIsCheckingAuth] = useState(true)
   const [error, setError] = useState(null)
   const [reservations, setReservations] = useState([])
-  const [availableSlots, setAvailableSlots] = useState('--')
   const [firstTimeSetup, setFirstTimeSetup] = useState(false)
-  const [activeTab, setActiveTab] = useState('dashboard')
   const [loginForm, setLoginForm] = useState({
     password: '',
     confirmPassword: ''
   })
   const [formError, setFormError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
-  const navigate = useNavigate()
   const [statusUpdateModal, setStatusUpdateModal] = useState({
     isOpen: false,
     reservation: null,
@@ -72,7 +69,6 @@ export default function AdminPage() {
   useEffect(() => {
     if (isAuthenticated) {
       fetchReservations()
-      fetchAvailableSlots()
       fetchAvailableSlotsCount()
     }
   }, [isAuthenticated])
@@ -150,31 +146,9 @@ export default function AdminPage() {
     }
   };
 
-  const fetchAvailableSlots = async () => {
-    try {
-      const slotsExist = await checkSlotsExist();
-      setAvailableSlots(slotsExist ? 'Yes' : 'No');
-    } catch (err) {
-      console.error('Error checking slots:', err);
-      setAvailableSlots('Error');
-    }
-  };
-
   const fetchAvailableSlotsCount = async () => {
-    if (!adminSupabase) {
-      console.error('Admin Supabase client not available');
-      return;
-    }
-
     try {
-      const now = new Date();
-      const { count, error } = await adminSupabase
-        .from('slots')
-        .select('*', { count: 'exact', head: true })
-        .gte('start_time', now.toISOString())
-        .eq('is_available', true);
-
-      if (error) throw error;
+      const count = await getAvailableSlotsCount();
       setAvailableSlotsCount(count || 0);
     } catch (err) {
       console.error('Error fetching available slots count:', err);
@@ -340,31 +314,6 @@ export default function AdminPage() {
           setSuccessMessage('');
         }, 8000);
       }
-    }
-  };
-
-  const handleDeleteReservation = async (reservation) => {
-    if (!window.confirm('Are you sure you want to delete this reservation?')) return;
-
-    setIsLoading(true);
-    setError(null);
-    setSuccessMessage('');
-
-    try {
-      const deletedReservation = await deleteReservation(reservation.id);
-
-      // Send cancellation email
-      await sendStatusUpdateEmail(deletedReservation, 'cancelled', 'Reservation was deleted by admin');
-
-      // Refresh reservations
-      await fetchReservations();
-
-      setSuccessMessage('Reservation deleted successfully');
-    } catch (err) {
-      console.error('Error deleting reservation:', err);
-      setError(err.message || 'Failed to delete reservation');
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -574,7 +523,7 @@ export default function AdminPage() {
         </div>
       ) : (
         <>
-          <Tabs defaultTab="dashboard" onChange={(tab) => setActiveTab(tab)}>
+          <Tabs defaultTab="dashboard">
             <Tab value="dashboard">Dashboard</Tab>
             <Tab value="reservations">Reservations</Tab>
             <Tab value="security">Security</Tab>
