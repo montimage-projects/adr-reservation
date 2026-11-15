@@ -269,64 +269,6 @@ export async function getAvailableSlotsCount() {
   }
 }
 
-export async function createTestSlots() {
-  try {
-    const now = new Date();
-    const slots = [];
-    
-    // Create slots for the next 7 days
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(now);
-      date.setDate(now.getDate() + i);
-      date.setHours(9, 0, 0, 0); // 9 AM
-      
-      // Create 4 slots per day (9 AM, 11 AM, 1 PM, 3 PM)
-      for (let j = 0; j < 4; j++) {
-        const startTime = new Date(date);
-        startTime.setHours(9 + (j * 2), 0, 0, 0);
-        
-        const endTime = new Date(startTime);
-        endTime.setHours(startTime.getHours() + 1, 30, 0, 0); // 1.5 hour slots
-        
-        const slotData = {
-          start_time: toFirestoreTimestamp(startTime),
-          end_time: toFirestoreTimestamp(endTime),
-          is_available: true,
-          created_at: serverTimestamp()
-        };
-        
-        const slotsRef = collection(db, 'slots');
-        const newSlotRef = await addDoc(slotsRef, slotData);
-        
-        slots.push({
-          id: newSlotRef.id,
-          ...slotData,
-          start_time: startTime,
-          end_time: endTime
-        });
-      }
-    }
-    
-    return slots;
-  } catch (err) {
-    console.error('Error creating test slots:', err);
-    throw err;
-  }
-}
-
-export async function checkSlotsExist() {
-  try {
-    const slotsRef = collection(db, 'slots');
-    const q = query(slotsRef, limit(1));
-    const querySnapshot = await getDocs(q);
-    
-    return !querySnapshot.empty;
-  } catch (err) {
-    console.error('Error checking if slots exist:', err);
-    throw err;
-  }
-}
-
 export async function resetSlotAvailability(slotId) {
   try {
     const slotRef = doc(db, 'slots', slotId);

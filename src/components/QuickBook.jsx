@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getClosestAvailableSlot, checkSlotsExist } from '../lib/firebase';
+import { getClosestAvailableSlot } from '../lib/firebase';
 import LoadingSpinner from './LoadingSpinner';
 
 function QuickBook() {
@@ -13,20 +13,11 @@ function QuickBook() {
     setError(null);
 
     try {
-      // Check if there are any slots in the database
-      const slotsExist = await checkSlotsExist();
-
-      if (!slotsExist) {
-        setError('No available slots found in the database. Click "Create Test Slots" to add some for testing.');
-        setLoading(false);
-        return;
-      }
-
       // Get the closest available slot
       const slot = await getClosestAvailableSlot();
 
       if (!slot) {
-        setError('All slots are currently booked. Click "Create Test Slots" to add more for testing.');
+        setError('No slots are available right now. Please check the calendar later.');
         setLoading(false);
         return;
       }

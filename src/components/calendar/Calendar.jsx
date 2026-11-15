@@ -50,7 +50,7 @@ function Calendar({ onSlotSelect, initialSelectedSlot }) {
 
       // If no slots found, you might want to indicate this
       if (!slotsData || slotsData.length === 0) {
-        setError('No slots available in the database. Use the "Create Test Slots" option above. If that fails, ensure your .env.local file includes a service role key.');
+        setError('No slots are available right now. Please check back later.');
       } else {
         // Find the first available slot
         const firstAvailableSlot = slotsData.find(slot => slot.is_available && !isSlotDisabled(slot.start_time));
