@@ -1,4 +1,4 @@
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 
 /**
  * Format a date object or string into a human-readable date format
@@ -96,7 +96,7 @@ export function calculateDuration(startTime, endTime) {
 }
 
 /**
- * Convert a date to an ISO string that's suitable for Supabase queries
+ * Convert a date to an ISO string that's suitable for database queries
  * @param {Date} date - Date to convert
  * @returns {string} - ISO string
  */

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
-import { createReservation, verifySlotAvailability, getUserReservationCount } from '../lib/supabase'
+import { createReservation, verifySlotAvailability, getUserReservationCount } from '../lib/firebase'
 import { registerUser, getCurrentUser } from '../lib/userService'
 import { sendBookingConfirmationEmail } from '../lib/emailService'
 import { checkRateLimit, recordAttempt, formatTimeUntilReset } from '../lib/rateLimiter'
@@ -292,11 +292,7 @@ export default function BookingPage() {
       console.error('Booking error:', err)
 
       // Handle specific permissions errors
-      if (err.message && err.message.includes('Service key not configured')) {
-        setSubmitError(
-          'Admin permissions required. Please add a service key in your .env.local file to complete bookings.'
-        )
-      } else if (err.code === '42501') {
+      if (err.code === 'permission-denied') {
         setSubmitError(
           'Permission denied. The application lacks necessary database permissions for completing bookings.'
         )
@@ -390,7 +386,7 @@ export default function BookingPage() {
 
         {!selectedSlot && !isQuickLoading && (
           <div className="mt-4">
-            <QuickBook showTestOptions={true} />
+            <QuickBook />
           </div>
         )}
 

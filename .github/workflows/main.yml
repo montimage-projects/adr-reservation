@@ -1,0 +1,36 @@
+name: CI
+
+# Build check only. Deploys come from the hosting provider's Git integration
+# (Netlify today, Vercel after cutover), so this workflow never deploys.
+
+on:
+  push:
+    branches: [main, firebase-migration]
+  pull_request:
+    branches: [main, firebase-migration]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      # Add a Test step (npm test) once a test runner is set up.

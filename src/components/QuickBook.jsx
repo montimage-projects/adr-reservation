@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getClosestAvailableSlot, checkSlotsExist, createTestSlots } from '../lib/supabase';
+import { getClosestAvailableSlot } from '../lib/firebase';
 import LoadingSpinner from './LoadingSpinner';
 
-function QuickBook({ showTestOptions = false }) {
+function QuickBook() {
   const [loading, setLoading] = useState(false);
-  const [creatingSlots, setCreatingSlots] = useState(false);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
 
@@ -14,20 +13,11 @@ function QuickBook({ showTestOptions = false }) {
     setError(null);
 
     try {
-      // Check if there are any slots in the database
-      const slotsExist = await checkSlotsExist();
-
-      if (!slotsExist) {
-        setError('No available slots found in the database. Click "Create Test Slots" to add some for testing.');
-        setLoading(false);
-        return;
-      }
-
       // Get the closest available slot
       const slot = await getClosestAvailableSlot();
 
       if (!slot) {
-        setError('All slots are currently booked. Click "Create Test Slots" to add more for testing.');
+        setError('No slots are available right now. Please check the calendar later.');
         setLoading(false);
         return;
       }
@@ -41,29 +31,6 @@ function QuickBook({ showTestOptions = false }) {
       console.error('Error finding closest slot:', err);
       setError('Failed to find an available slot. Please try again.');
       setLoading(false);
-    }
-  };
-
-  const handleCreateTestSlots = async () => {
-    setCreatingSlots(true);
-    setError(null);
-
-    try {
-      await createTestSlots();
-      setError('Test slots created successfully! You can now use Quick Book.');
-    } catch (err) {
-      console.error('Error creating test slots:', err);
-
-      // Handle specific error for missing service key
-      if (err.message && err.message.includes('Service key not configured')) {
-        setError('Admin permissions required. Please add a service key in your .env.local file.');
-      } else if (err.code === '42501') {
-        setError('Permission denied. The application lacks necessary database permissions.');
-      } else {
-        setError('Failed to create test slots. Please try again.');
-      }
-    } finally {
-      setCreatingSlots(false);
     }
   };
 

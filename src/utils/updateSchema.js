@@ -1,49 +1,52 @@
-import { adminSupabase } from '../lib/supabase';
+import { db } from '../lib/firebase';
+import { collection, getDocs, doc, writeBatch } from 'firebase/firestore';
 
 /**
- * This utility helps update the Supabase schema
- * Run this script using:
- * node -r esm -r dotenv/config src/utils/updateSchema.js
+ * Backfills missing fields on existing Firestore documents.
+ * Import and call it from app code; it uses the browser Firebase client, so it
+ * cannot be run directly with node.
  */
 async function updateSchema() {
-  if (!adminSupabase) {
-    console.error('Admin Supabase client not available. Make sure your service key is configured in .env.local');
-    return;
-  }
-
-  console.log('Updating Supabase schema...');
+  console.log('Updating Firebase schema...');
 
   try {
-    // Add reference column to reservations table if it doesn't exist
-    const { data, error } = await adminSupabase.rpc('add_column_if_not_exists', {
-      _table: 'reservations',
-      _column: 'reference',
-      _type: 'text'
-    });
-
-    if (error) {
-      throw error;
+    // In Firebase/Firestore, we don't need to explicitly define schema
+    // But we can update existing documents to ensure they have required fields
+    
+    // Example: Ensure all reservations have a reference field
+    const reservationsRef = collection(db, 'reservations');
+    const snapshot = await getDocs(reservationsRef);
+    
+    if (snapshot.empty) {
+      console.log('No reservations found to update');
+      return;
     }
-
-    console.log('Schema update successful!');
-    console.log('Added reference column to reservations table:', data);
-
+    
+    const batch = writeBatch(db);
+    let updateCount = 0;
+    
+    snapshot.forEach((document) => {
+      const data = document.data();
+      
+      // If reference field is missing, add it with a generated value
+      if (!data.reference) {
+        const docRef = doc(db, 'reservations', document.id);
+        const reference = `REF-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+        
+        batch.update(docRef, { reference });
+        updateCount++;
+      }
+    });
+    
+    if (updateCount > 0) {
+      await batch.commit();
+      console.log(`Schema update successful! Added reference field to ${updateCount} reservations.`);
+    } else {
+      console.log('All reservations already have a reference field. No updates needed.');
+    }
   } catch (error) {
     console.error('Error updating schema:', error);
-
-    // Fallback if RPC doesn't exist - provide SQL for manual execution
-    console.log('\nAlternatively, you can run the following SQL in the Supabase SQL editor:');
-    console.log('ALTER TABLE reservations ADD COLUMN IF NOT EXISTS reference TEXT;');
   }
-}
-
-// Only run if executed directly
-if (typeof window === 'undefined' && require.main === module) {
-  updateSchema()
-    .catch(console.error)
-    .finally(() => {
-      process.exit();
-    });
 }
 
 export default updateSchema;

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getReservations, checkSlotsExist, createTestSlots, updateReservationStatus, adminSupabase } from '../lib/supabase'
+import { getReservations, getAvailableSlotsCount, updateReservationStatus } from '../lib/firebase'
 import LoadingSpinner from '../components/LoadingSpinner'
 import {
   isFirstTimeSetup,
@@ -8,7 +8,7 @@ import {
   logoutAdmin,
   isAdminAuthenticated
 } from '../lib/authService'
-import { useNavigate, Link } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { sendStatusUpdateEmail } from '../lib/emailService'
 import VerificationSettings from '../components/admin/VerificationSettings'
 import { Tab, TabPanel, Tabs } from '../components/Tabs'
@@ -19,16 +19,13 @@ export default function AdminPage() {
   const [isCheckingAuth, setIsCheckingAuth] = useState(true)
   const [error, setError] = useState(null)
   const [reservations, setReservations] = useState([])
-  const [availableSlots, setAvailableSlots] = useState('--')
   const [firstTimeSetup, setFirstTimeSetup] = useState(false)
-  const [activeTab, setActiveTab] = useState('dashboard')
   const [loginForm, setLoginForm] = useState({
     password: '',
     confirmPassword: ''
   })
   const [formError, setFormError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
-  const navigate = useNavigate()
   const [statusUpdateModal, setStatusUpdateModal] = useState({
     isOpen: false,
     reservation: null,
@@ -72,7 +69,6 @@ export default function AdminPage() {
   useEffect(() => {
     if (isAuthenticated) {
       fetchReservations()
-      fetchAvailableSlots()
       fetchAvailableSlotsCount()
     }
   }, [isAuthenticated])
@@ -140,41 +136,15 @@ export default function AdminPage() {
       setReservations(sortReservations(data || []));
     } catch (err) {
       console.error('Error fetching reservations:', err);
-      if (err.message && err.message.includes('Service key not configured')) {
-        setError('Admin access requires a service key. Please configure VITE_SUPABASE_SERVICE_KEY in your .env.local file.');
-      } else {
-        setError('Failed to load reservations. Please try again later.');
-      }
+      setError('Failed to load reservations. Please try again later.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const fetchAvailableSlots = async () => {
-    try {
-      const slotsExist = await checkSlotsExist();
-      setAvailableSlots(slotsExist ? 'Yes' : 'No');
-    } catch (err) {
-      console.error('Error checking slots:', err);
-      setAvailableSlots('Error');
-    }
-  };
-
   const fetchAvailableSlotsCount = async () => {
-    if (!adminSupabase) {
-      console.error('Admin Supabase client not available');
-      return;
-    }
-
     try {
-      const now = new Date();
-      const { count, error } = await adminSupabase
-        .from('slots')
-        .select('*', { count: 'exact', head: true })
-        .gte('start_time', now.toISOString())
-        .eq('is_available', true);
-
-      if (error) throw error;
+      const count = await getAvailableSlotsCount();
       setAvailableSlotsCount(count || 0);
     } catch (err) {
       console.error('Error fetching available slots count:', err);
@@ -340,31 +310,6 @@ export default function AdminPage() {
           setSuccessMessage('');
         }, 8000);
       }
-    }
-  };
-
-  const handleDeleteReservation = async (reservation) => {
-    if (!window.confirm('Are you sure you want to delete this reservation?')) return;
-
-    setIsLoading(true);
-    setError(null);
-    setSuccessMessage('');
-
-    try {
-      const deletedReservation = await deleteReservation(reservation.id);
-
-      // Send cancellation email
-      await sendStatusUpdateEmail(deletedReservation, 'cancelled', 'Reservation was deleted by admin');
-
-      // Refresh reservations
-      await fetchReservations();
-
-      setSuccessMessage('Reservation deleted successfully');
-    } catch (err) {
-      console.error('Error deleting reservation:', err);
-      setError(err.message || 'Failed to delete reservation');
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -560,11 +505,8 @@ export default function AdminPage() {
 
       {error && (
         <div className="p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded-md text-red-600 dark:text-red-400">
-          <p className="font-medium">Service Key Required</p>
+          <p className="font-medium">Something went wrong</p>
           <p className="mt-1">{error}</p>
-          <p className="mt-2 text-sm">
-            See the <code className="bg-red-100 dark:bg-red-800/50 px-1 py-0.5 rounded">dev-docs/supabase-setup.md</code> file for instructions.
-          </p>
         </div>
       )}
 
@@ -574,7 +516,7 @@ export default function AdminPage() {
         </div>
       ) : (
         <>
-          <Tabs defaultTab="dashboard" onChange={(tab) => setActiveTab(tab)}>
+          <Tabs defaultTab="dashboard">
             <Tab value="dashboard">Dashboard</Tab>
             <Tab value="reservations">Reservations</Tab>
             <Tab value="security">Security</Tab>
@@ -663,7 +605,7 @@ export default function AdminPage() {
             <div className="card-body">
               {error ? (
                 <div className="text-center text-gray-600 dark:text-gray-400 py-4">
-                  Configure service key to view reservations
+                  Reservations could not be loaded
                 </div>
               ) : reservations.length > 0 ? (
                 <div className="overflow-x-auto">

@@ -1,5 +1,6 @@
 import * as jose from 'jose';
-import { adminSupabase } from './supabase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { db, logOut } from './firebase';
 
 // Secret key for JWT signing - in production, use an environment variable
 const JWT_SECRET = import.meta.env.VITE_JWT_SECRET || 'admin-secret-key';
@@ -13,21 +14,15 @@ const ADMIN_PASSWORD_KEY = 'admin_password_hash';
 // Check if admin password has been set up in the database
 export async function isFirstTimeSetup() {
   try {
-    if (!adminSupabase) {
-      console.error('Admin Supabase client not available');
-      return true; // Assume first-time setup if no admin client
-    }
+    const settingsRef = doc(db, 'settings', ADMIN_PASSWORD_KEY);
+    const docSnap = await getDoc(settingsRef);
     
-    const { data, error } = await adminSupabase
-      .from('settings')
-      .select('value')
-      .eq('key', ADMIN_PASSWORD_KEY)
-      .single();
-    
-    if (error) {
-      console.error('Error checking admin password:', error);
+    if (!docSnap.exists()) {
+      console.log('Admin password not set up yet');
       return true;
     }
+    
+    const data = docSnap.data();
     
     // If value is empty string, it means password hasn't been set
     return !data || !data.value;
@@ -39,25 +34,16 @@ export async function isFirstTimeSetup() {
 
 export async function setupAdminPassword(password) {
   try {
-    if (!adminSupabase) {
-      console.error('Admin Supabase client not available');
-      return false;
-    }
-    
     // In a real application, use a proper hashing library like bcrypt
     // For this demo, we'll use a simple hash function
     const hashedPassword = hashPassword(password);
     
-    // Update the admin password hash in the settings table
-    const { error } = await adminSupabase
-      .from('settings')
-      .update({ value: hashedPassword, updated_at: new Date().toISOString() })
-      .eq('key', ADMIN_PASSWORD_KEY);
-    
-    if (error) {
-      console.error('Error setting admin password:', error);
-      return false;
-    }
+    // Update the admin password hash in the settings collection
+    const settingsRef = doc(db, 'settings', ADMIN_PASSWORD_KEY);
+    await setDoc(settingsRef, { 
+      value: hashedPassword, 
+      updated_at: new Date().toISOString() 
+    });
     
     return true;
   } catch (err) {
@@ -68,22 +54,15 @@ export async function setupAdminPassword(password) {
 
 export async function loginAdmin(password) {
   try {
-    if (!adminSupabase) {
-      console.error('Admin Supabase client not available');
-      return { success: false, message: 'Admin access not available' };
-    }
-    
     // Get the stored password hash from the database
-    const { data, error } = await adminSupabase
-      .from('settings')
-      .select('value')
-      .eq('key', ADMIN_PASSWORD_KEY)
-      .single();
+    const settingsRef = doc(db, 'settings', ADMIN_PASSWORD_KEY);
+    const docSnap = await getDoc(settingsRef);
     
-    if (error) {
-      console.error('Error retrieving admin password:', error);
-      return { success: false, message: 'Error retrieving admin credentials' };
+    if (!docSnap.exists()) {
+      return { success: false, message: 'Admin account not set up' };
     }
+    
+    const data = docSnap.data();
     
     if (!data || !data.value) {
       return { success: false, message: 'Admin account not set up' };
@@ -114,8 +93,9 @@ export async function loginAdmin(password) {
   }
 }
 
-export function logoutAdmin() {
+export async function logoutAdmin() {
   localStorage.removeItem(TOKEN_KEY);
+  await logOut();
 }
 
 export async function isAdminAuthenticated() {

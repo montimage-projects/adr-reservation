@@ -1,4 +1,5 @@
-import { supabase, adminSupabase } from './supabase';
+import { db } from './firebase';
+import { collection, doc, getDoc, updateDoc, query, where, getDocs, orderBy, addDoc, deleteDoc } from 'firebase/firestore';
 import * as jose from 'jose';
 import { sendCancellationEmail } from './emailService';
 
@@ -16,53 +17,41 @@ const USER_DATA_KEY = 'userData'; // Keep this for backward compatibility
  */
 export async function registerUser(userData) {
   try {
-    // Check if we have the admin client available
-    if (!adminSupabase) {
-      throw new Error('Admin access is required to register users. Service key not configured.');
-    }
-
+    // Normalize email to lowercase
+    const email = userData.email.toLowerCase();
+    
     // Check if user already exists
-    const { data: existingUser, error: checkError } = await adminSupabase
-      .from('users')
-      .select('*')
-      .eq('email', userData.email)
-      .single();
-
-    if (checkError && checkError.code !== 'PGRST116') {
-      // Error other than "not found"
-      throw checkError;
-    }
-
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('email', '==', email));
+    const querySnapshot = await getDocs(q);
+    
     let userId;
-    if (existingUser) {
-      // Update existing user
-      const { error } = await adminSupabase
-        .from('users')
-        .update({
-          name: userData.name,
-          group_id: userData.groupId,
-          // Don't update email as it's the primary identifier
-        })
-        .eq('id', existingUser.id)
-        .select();
-
-      if (error) throw error;
+    let existingUser = null;
+    
+    if (!querySnapshot.empty) {
+      // User exists, update them
+      existingUser = querySnapshot.docs[0];
       userId = existingUser.id;
+      
+      const userRef = doc(db, 'users', userId);
+      await updateDoc(userRef, {
+        name: userData.name,
+        group_id: userData.groupId,
+        // Don't update email as it's the primary identifier
+        updated_at: new Date().toISOString()
+      });
     } else {
       // Create new user
-      const { data, error } = await adminSupabase
-        .from('users')
-        .insert([
-          {
-            name: userData.name,
-            email: userData.email,
-            group_id: userData.groupId,
-          }
-        ])
-        .select();
-
-      if (error) throw error;
-      userId = data[0].id;
+      const newUser = {
+        name: userData.name,
+        email: email,
+        group_id: userData.groupId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      
+      const docRef = await addDoc(usersRef, newUser);
+      userId = docRef.id;
     }
 
     // Store in localStorage for convenience (more secure would be HTTP-only cookies)
@@ -91,29 +80,21 @@ export async function registerUser(userData) {
  */
 export async function getUserByEmail(email) {
   try {
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('email', email)
-      .single();
-
-    if (error) {
-      // If hit RLS issue, try using admin client
-      if (error.code === '42501' && adminSupabase) {
-        const { data: adminData, error: adminError } = await adminSupabase
-          .from('users')
-          .select('*')
-          .eq('email', email)
-          .single();
-
-        if (adminError) throw adminError;
-        return { success: true, userData: adminData };
-      } else {
-        throw error;
-      }
+    // Normalize email to lowercase
+    const normalizedEmail = email.toLowerCase();
+    
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('email', '==', normalizedEmail));
+    const querySnapshot = await getDocs(q);
+    
+    if (querySnapshot.empty) {
+      return { success: false, error: 'User not found' };
     }
-
-    return { success: true, userData: data };
+    
+    const userData = querySnapshot.docs[0].data();
+    userData.id = querySnapshot.docs[0].id; // Add the document ID
+    
+    return { success: true, userData };
   } catch (error) {
     console.error('Error getting user:', error);
     return { success: false, error: error.message };
@@ -127,40 +108,63 @@ export async function getUserByEmail(email) {
  */
 export async function getUserReservations(email) {
   try {
-    // Always try to use adminSupabase for better data access
-    if (adminSupabase) {
-      const { data, error } = await adminSupabase
-        .from('reservations')
-        .select(`
-          *,
-          slots (*)
-        `)
-        .eq('user_email', email)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      // Log reservation data for debugging
-      console.log('Retrieved reservations:', data);
-
-      return { success: true, reservations: data };
+    // Normalize email to lowercase
+    const normalizedEmail = email.toLowerCase();
+    
+    const reservationsRef = collection(db, 'reservations');
+    const q = query(
+      reservationsRef, 
+      where('user_email', '==', normalizedEmail),
+      orderBy('created_at', 'desc')
+    );
+    
+    const querySnapshot = await getDocs(q);
+    
+    if (querySnapshot.empty) {
+      return { success: true, reservations: [] };
     }
-
-    // Fallback to regular client if admin is not available
-    const { data, error } = await supabase
-      .from('reservations')
-      .select(`
-        *,
-        slots (*)
-      `)
-      .eq('user_email', email)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      throw error;
-    }
-
-    return { success: true, reservations: data };
+    
+    const reservations = [];
+    const slotPromises = [];
+    
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      const reservation = {
+        id: doc.id,
+        ...data,
+        created_at: data.created_at ? new Date(data.created_at.seconds * 1000) : null,
+        updated_at: data.updated_at ? new Date(data.updated_at.seconds * 1000) : null
+      };
+      
+      // Get the associated slot data
+      if (data.slot_id) {
+        const slotPromise = getDoc(doc(db, 'slots', data.slot_id))
+          .then(slotSnap => {
+            if (slotSnap.exists()) {
+              const slotData = slotSnap.data();
+              reservation.slots = {
+                id: slotSnap.id,
+                ...slotData,
+                start_time: slotData.start_time ? new Date(slotData.start_time.seconds * 1000) : null,
+                end_time: slotData.end_time ? new Date(slotData.end_time.seconds * 1000) : null,
+                created_at: slotData.created_at ? new Date(slotData.created_at.seconds * 1000) : null
+              };
+            }
+            return reservation;
+          });
+        
+        slotPromises.push(slotPromise);
+      }
+      
+      reservations.push(reservation);
+    });
+    
+    await Promise.all(slotPromises);
+    
+    // Log reservation data for debugging
+    console.log('Retrieved reservations:', reservations);
+    
+    return { success: true, reservations };
   } catch (error) {
     console.error('Error getting user reservations:', error);
     return { success: false, error: error.message };
@@ -242,41 +246,37 @@ async function generateUserToken(userData, userId) {
 export async function cancelReservation(reservationId, cancellationReason = 'User requested cancellation') {
   try {
     // First get the reservation data to get the slot_id
-    const { data: reservation, error: fetchError } = await adminSupabase
-      .from('reservations')
-      .select('*, slots(*)')
-      .eq('id', reservationId)
-      .single();
-
-    if (fetchError) {
-      console.error('Error fetching reservation:', fetchError);
-      return { success: false, error: fetchError.message };
+    const reservationRef = doc(db, 'reservations', reservationId);
+    const reservationSnap = await getDoc(reservationRef);
+    
+    if (!reservationSnap.exists()) {
+      console.error('Reservation not found');
+      return { success: false, error: 'Reservation not found' };
     }
-
-    // Delete the reservation
-    const { error: deleteError } = await adminSupabase
-      .from('reservations')
-      .delete()
-      .eq('id', reservationId);
-
-    if (deleteError) {
-      console.error('Error cancelling reservation:', deleteError);
-      return { success: false, error: deleteError.message };
-    }
-
-    // Reset the slot availability
+    
+    const reservation = reservationSnap.data();
+    let slotData = null;
+    
+    // Get the slot data
     if (reservation.slot_id) {
-      const { error: updateError } = await adminSupabase
-        .from('slots')
-        .update({ is_available: true })
-        .eq('id', reservation.slot_id);
-
-      if (updateError) {
-        console.error('Error resetting slot availability:', updateError);
-        // Don't return error here as the reservation was already deleted
+      const slotRef = doc(db, 'slots', reservation.slot_id);
+      const slotSnap = await getDoc(slotRef);
+      
+      if (slotSnap.exists()) {
+        slotData = slotSnap.data();
+        slotData.id = slotSnap.id;
       }
     }
-
+    
+    // Delete the reservation
+    await deleteDoc(reservationRef);
+    
+    // Reset the slot availability
+    if (reservation.slot_id) {
+      const slotRef = doc(db, 'slots', reservation.slot_id);
+      await updateDoc(slotRef, { is_available: true });
+    }
+    
     // Send cancellation email
     if (reservation) {
       console.log('Sending cancellation email for reservation:', reservation);
@@ -286,12 +286,16 @@ export async function cancelReservation(reservationId, cancellationReason = 'Use
           email: reservation.user_email,
           groupId: reservation.group_id
         },
-        slot: reservation.slots,
+        slot: slotData ? {
+          ...slotData,
+          start_time: slotData.start_time ? new Date(slotData.start_time.seconds * 1000) : null,
+          end_time: slotData.end_time ? new Date(slotData.end_time.seconds * 1000) : null
+        } : null,
         reference: reservation.reference,
         cancellationReason: cancellationReason // This will be passed as 'reason' to the template
       });
     }
-
+    
     return { success: true };
   } catch (error) {
     console.error('Error cancelling reservation:', error);

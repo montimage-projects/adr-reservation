@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import ThemeToggle from './ThemeToggle';
-import { getClosestAvailableSlot, checkSlotsExist, createTestSlots } from '../lib/supabase';
+import { getClosestAvailableSlot } from '../lib/firebase';
 import { isAdminAuthenticated } from '../lib/authService';
 import { isUserAuthenticated, getCurrentUser } from '../lib/userService';
 
@@ -64,57 +64,13 @@ export default function Layout() {
   const handleQuickBook = async () => {
     setQuickBookLoading(true);
     try {
-      // Check if there are any slots in the database
-      const slotsExist = await checkSlotsExist();
+      const slot = await getClosestAvailableSlot();
 
-      if (!slotsExist) {
-        // No slots exist, offer to create test slots
-        if (window.confirm('No available slots found. Would you like to create test slots for booking?')) {
-          try {
-            await createTestSlots();
-            alert('Test slots created successfully! Trying to book the next available slot...');
-
-            // Now try to get a slot again
-            const slot = await getClosestAvailableSlot();
-            if (slot) {
-              sessionStorage.setItem('quickBookSlot', JSON.stringify(slot));
-              navigate('/book?quick=true');
-            } else {
-              alert('Something went wrong with the created slots. Please try again.');
-            }
-          } catch (slotErr) {
-            if (slotErr.message && slotErr.message.includes('Service key not configured')) {
-              alert('Admin permissions required. Please add a service key in your .env.local file.');
-            } else if (slotErr.code === '42501') {
-              alert('Permission denied. Your application lacks necessary database permissions.');
-            } else {
-              alert(`Error creating test slots: ${slotErr.message || 'Unknown error'}`);
-            }
-          }
-        }
+      if (slot) {
+        sessionStorage.setItem('quickBookSlot', JSON.stringify(slot));
+        navigate('/book?quick=true');
       } else {
-        // Slots exist, try to get the next available one
-        const slot = await getClosestAvailableSlot();
-
-        if (slot) {
-          sessionStorage.setItem('quickBookSlot', JSON.stringify(slot));
-          navigate('/book?quick=true');
-        } else {
-          if (window.confirm('All slots are currently booked. Would you like to create more test slots?')) {
-            try {
-              await createTestSlots();
-              alert('Test slots created successfully! Please try booking again.');
-            } catch (slotErr) {
-              if (slotErr.message && slotErr.message.includes('Service key not configured')) {
-                alert('Admin permissions required. Please add a service key in your .env.local file.');
-              } else if (slotErr.code === '42501') {
-                alert('Permission denied. Your application lacks necessary database permissions.');
-              } else {
-                alert(`Error creating test slots: ${slotErr.message || 'Unknown error'}`);
-              }
-            }
-          }
-        }
+        alert('No slots are available right now. Please check the calendar later.');
       }
     } catch (err) {
       console.error('Error with quick booking:', err);
