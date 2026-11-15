@@ -31,6 +31,7 @@ vi.mock('firebase/firestore', () => ({
   addDoc: vi.fn(),
   setDoc: vi.fn(),
   writeBatch: vi.fn(),
+  runTransaction: vi.fn(),
   updateDoc: vi.fn(),
   deleteDoc: vi.fn(),
   query: vi.fn((ref) => ref),
@@ -48,7 +49,7 @@ vi.mock('./emailService', () => ({
   sendCancellationEmail: vi.fn(),
 }));
 
-import { doc, getDoc, getDocs, where, writeBatch } from 'firebase/firestore';
+import { doc, getDoc, getDocs, runTransaction, where, writeBatch } from 'firebase/firestore';
 import { createReservation, db, getReservations, getUserReservationCount } from './firebase';
 import { getUserReservations } from './userService';
 
@@ -189,36 +190,41 @@ describe('createReservation', () => {
     notes: '',
   };
 
-  let batch;
+  let transaction;
 
   beforeEach(() => {
-    vi.mocked(getDoc).mockResolvedValueOnce(availableSlotSnapshot);
-    batch = { set: vi.fn(), update: vi.fn(), commit: vi.fn(() => Promise.resolve()) };
-    vi.mocked(writeBatch).mockReturnValue(batch);
+    transaction = {
+      get: vi.fn(() => Promise.resolve(availableSlotSnapshot)),
+      set: vi.fn(),
+      update: vi.fn(),
+    };
+    vi.mocked(runTransaction).mockImplementation((db, updateFunction) => updateFunction(transaction));
   });
 
   it('stores the reservation email lowercased', async () => {
     const reservation = await createReservation('s1', mixedCaseUser);
 
-    expect(batch.set).toHaveBeenCalledWith(
+    expect(transaction.set).toHaveBeenCalledWith(
       { path: 'reservations/r-new', id: 'r-new' },
       expect.objectContaining({ user_email: 'user@example.com' })
     );
     expect(reservation.user_email).toBe('user@example.com');
   });
 
-  it("links the reservation to the visitor's uid and takes the slot in the same batch", async () => {
+  it("links the reservation to the visitor's uid and takes the slot in the same transaction", async () => {
     const reservation = await createReservation('s1', mixedCaseUser);
 
-    expect(batch.set).toHaveBeenCalledWith(
+    expect(runTransaction).toHaveBeenCalledTimes(1);
+    expect(transaction.get).toHaveBeenCalledWith({ path: 'slots/s1', id: 's1' });
+    expect(transaction.set).toHaveBeenCalledWith(
       { path: 'reservations/r-new', id: 'r-new' },
       expect.objectContaining({ slot_id: 's1', user_uid: 'visitor-uid', status: 'confirmed' })
     );
-    expect(batch.update).toHaveBeenCalledWith(
+    expect(transaction.update).toHaveBeenCalledWith(
       { path: 'slots/s1', id: 's1' },
       { is_available: false, reservation_id: 'r-new' }
     );
-    expect(batch.commit).toHaveBeenCalledTimes(1);
+    expect(writeBatch).not.toHaveBeenCalled();
     expect(reservation.id).toBe('r-new');
   });
 
@@ -226,6 +232,7 @@ describe('createReservation', () => {
     fakeAuth.currentUser = null;
 
     await expect(createReservation('s1', mixedCaseUser)).rejects.toThrow('signed in');
+    expect(runTransaction).not.toHaveBeenCalled();
     expect(writeBatch).not.toHaveBeenCalled();
   });
 });

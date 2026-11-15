@@ -1,6 +1,6 @@
 // Firebase configuration
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, query, where, orderBy, serverTimestamp, onSnapshot, limit, Timestamp, getCountFromServer, writeBatch } from 'firebase/firestore';
+import { getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, query, where, orderBy, serverTimestamp, onSnapshot, limit, Timestamp, getCountFromServer, runTransaction } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { generateBookingReference } from './emailService';
 
@@ -76,20 +76,9 @@ export async function createReservation(slotId, userData) {
     const bookingReference = generateBookingReference();
     console.log('Generated booking reference:', bookingReference);
 
-    // First verify the slot is still available
+    // Pre-allocate the reservation ID so the slot update can name it. It is
+    // made outside the transaction, so a retry reuses the same ID.
     const slotRef = doc(db, 'slots', slotId);
-    const slotSnap = await getDoc(slotRef);
-    
-    if (!slotSnap.exists()) {
-      throw new Error('Slot not found');
-    }
-    
-    const slotData = slotSnap.data();
-    if (!slotData.is_available) {
-      throw new Error('Slot is no longer available');
-    }
-    
-    // Pre-allocate the reservation ID so the slot update can name it
     const reservationRef = doc(collection(db, 'reservations'));
 
     // Prepare reservation data (the keys must match firestore.rules)
@@ -107,29 +96,41 @@ export async function createReservation(slotId, userData) {
 
     console.log('Reservation data to be saved:', reservationData);
 
-    // Create the reservation and take the slot in one write: the rules only
-    // accept the two together (docs/auth-model.md).
-    const batch = writeBatch(db);
-    batch.set(reservationRef, reservationData);
-    batch.update(slotRef, {
-      is_available: false,
-      reservation_id: reservationRef.id
+    // Check availability, create the reservation and take the slot in one
+    // transaction (docs/auth-model.md). If another booking takes the slot
+    // first, Firestore retries the callback, which then sees the slot taken.
+    const slot = await runTransaction(db, async (transaction) => {
+      const slotSnap = await transaction.get(slotRef);
+      if (!slotSnap.exists()) {
+        throw new Error('Slot not found');
+      }
+
+      const slotData = slotSnap.data();
+      if (!slotData.is_available) {
+        throw new Error('Slot is no longer available');
+      }
+
+      transaction.set(reservationRef, reservationData);
+      transaction.update(slotRef, {
+        is_available: false,
+        reservation_id: reservationRef.id
+      });
+      return { id: slotSnap.id, data: slotData };
     });
-    await batch.commit();
-    
-    // Get the slot data to return with the reservation
+
+    // Return the reservation with the slot as the transaction read it
     const reservation = {
       id: reservationRef.id,
       ...reservationData,
       slots: {
-        id: slotSnap.id,
-        ...slotData,
-        start_time: fromFirestoreTimestamp(slotData.start_time),
-        end_time: fromFirestoreTimestamp(slotData.end_time),
-        created_at: fromFirestoreTimestamp(slotData.created_at)
+        id: slot.id,
+        ...slot.data,
+        start_time: fromFirestoreTimestamp(slot.data.start_time),
+        end_time: fromFirestoreTimestamp(slot.data.end_time),
+        created_at: fromFirestoreTimestamp(slot.data.created_at)
       }
     };
-    
+
     console.log('Final reservation data to be returned:', reservation);
     return reservation;
   } catch (err) {
