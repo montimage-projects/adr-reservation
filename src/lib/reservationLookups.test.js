@@ -36,8 +36,8 @@ vi.mock('./emailService', () => ({
   sendCancellationEmail: vi.fn(),
 }));
 
-import { doc, getDoc, getDocs } from 'firebase/firestore';
-import { db, getReservations, getUserReservationCount } from './firebase';
+import { addDoc, doc, getDoc, getDocs, where } from 'firebase/firestore';
+import { createReservation, db, getReservations, getUserReservationCount } from './firebase';
 import { getUserReservations } from './userService';
 
 const futureStart = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -78,6 +78,11 @@ const slotSnapshot = {
     created_at: ts(new Date()),
     is_available: false,
   }),
+};
+
+const availableSlotSnapshot = {
+  ...slotSnapshot,
+  data: () => ({ ...slotSnapshot.data(), is_available: true }),
 };
 
 beforeEach(() => {
@@ -122,5 +127,46 @@ describe('getUserReservations', () => {
       start_time: new Date(Math.floor(futureStart.getTime() / 1000) * 1000),
     });
     expect(doc).toHaveBeenCalledWith(db, 'slots', 's1');
+  });
+});
+
+describe('createReservation', () => {
+  const mixedCaseUser = {
+    name: 'Test User',
+    email: 'User@Example.COM',
+    groupId: 'g1',
+    notes: '',
+  };
+
+  beforeEach(() => {
+    vi.mocked(getDoc).mockResolvedValueOnce(availableSlotSnapshot);
+    vi.mocked(addDoc).mockResolvedValueOnce({ id: 'r-new' });
+  });
+
+  it('stores the reservation email lowercased', async () => {
+    const reservation = await createReservation('s1', mixedCaseUser);
+
+    expect(addDoc).toHaveBeenCalledWith(
+      { path: 'reservations' },
+      expect.objectContaining({ user_email: 'user@example.com' })
+    );
+    expect(reservation.user_email).toBe('user@example.com');
+  });
+
+  it('counts a mixed-case reservation toward the one-active-reservation limit', async () => {
+    await createReservation('s1', mixedCaseUser);
+    const stored = vi.mocked(addDoc).mock.calls[0][1];
+
+    // Emulate Firestore's exact-match equality filter on user_email.
+    vi.mocked(getDocs).mockImplementationOnce(async () => {
+      const emailFilter = vi.mocked(where).mock.calls.find(([field]) => field === 'user_email');
+      const matches = emailFilter && emailFilter[2] === stored.user_email;
+      return querySnapshot(matches ? [{ id: 'r-new', data: () => stored }] : []);
+    });
+
+    const result = await getUserReservationCount(mixedCaseUser.email);
+
+    expect(result.success).toBe(true);
+    expect(result.count).toBe(1);
   });
 });
