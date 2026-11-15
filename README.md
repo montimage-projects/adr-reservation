@@ -10,7 +10,7 @@
 <br />
 
 <div align="center">
-  <img src="https://img.shields.io/badge/version-1.0.0-blue" alt="Version" />
+  <img src="https://img.shields.io/badge/version-0.1.5-blue" alt="Version" />
   <img src="https://img.shields.io/badge/status-active-brightgreen" alt="Status" />
 </div>
 
@@ -42,7 +42,7 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/montimage-project/adr-reservation.git
+git clone https://github.com/montimage-projects/adr-reservation.git
 cd adr-reservation
 
 # Install dependencies
@@ -60,7 +60,8 @@ npm run dev
 
 - Node.js (v20 or higher)
 - npm or yarn
-- Firebase project with Firestore enabled
+- Firebase project with Firestore and Authentication (Anonymous and
+  Email/Password providers) enabled
 - Modern web browser
 - EmailJS
 
@@ -78,8 +79,8 @@ VITE_FIREBASE_APP_ID=your-app-id
 VITE_FIREBASE_MEASUREMENT_ID=your-measurement-id
 VITE_EMAILJS_SERVICE_ID=
 VITE_EMAILJS_PUBLIC_KEY=
-VITE_EMAILJS_CANCELLATION_TEMPLATE_ID=adr_reservation_cancel
-VITE_EMAILJS_CONFIRMATION_TEMPLATE_ID=adr_reservation_confirm
+VITE_EMAILJS_CANCELLATION_TEMPLATE_ID=your-cancellation-template-id
+VITE_EMAILJS_CONFIRMATION_TEMPLATE_ID=your-confirmation-template-id
 ```
 
 ### Admin accounts
@@ -138,6 +139,20 @@ project or credentials are involved. Without a running emulator
 checks the rules' shape, the payload keys and that `firestore.indexes.json`
 covers every composite query the app runs (the emulator ignores indexes).
 
+## 🚢 Deployment
+
+- **Firestore rules and indexes:** deploy with the Firebase CLI
+  (`firebase deploy --only firestore:rules,firestore:indexes --project <your-project-id>`).
+  The rules themselves are in [`firestore.rules`](firestore.rules).
+- **Web app:** the target host is Vercel, which builds with `npm run build`
+  and serves `dist/` using the SPA rewrite in [`vercel.json`](vercel.json).
+  CI only lints, tests and builds; it never deploys.
+- **Pending manual steps:** creating the Vercel project, setting its
+  environment variables and the production cutover from Netlify are not done
+  yet (#16, #17, #18).
+
+The full steps are in [`FIREBASE_MIGRATION.md`](FIREBASE_MIGRATION.md#deployment).
+
 ## 🛡️ Security Features
 
 - Firestore security rules
@@ -153,6 +168,8 @@ covers every composite query the app runs (the emulator ignores indexes).
 - **Styling**: Tailwind CSS, Material Tailwind
 - **Backend**: Firebase (Firestore, Authentication)
 - **Authentication**: Firebase Authentication
+- **Hosting**: Vercel (target; production stays on Netlify until the cutover
+  in #18)
 - **Email**: EmailJS
 
 ## 📄 License
