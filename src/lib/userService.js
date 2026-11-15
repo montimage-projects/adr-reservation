@@ -127,10 +127,10 @@ export async function getUserReservations(email) {
     const reservations = [];
     const slotPromises = [];
     
-    querySnapshot.forEach((doc) => {
-      const data = doc.data();
+    querySnapshot.forEach((docSnap) => {
+      const data = docSnap.data();
       const reservation = {
-        id: doc.id,
+        id: docSnap.id,
         ...data,
         created_at: data.created_at ? new Date(data.created_at.seconds * 1000) : null,
         updated_at: data.updated_at ? new Date(data.updated_at.seconds * 1000) : null
