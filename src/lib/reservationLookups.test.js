@@ -7,7 +7,9 @@ vi.mock('firebase/app', () => ({
 }));
 
 vi.mock('firebase/auth', () => ({
-  getAuth: vi.fn(() => ({})),
+  getAuth: vi.fn(() => ({ currentUser: null, authStateReady: vi.fn(() => Promise.resolve()) })),
+  onAuthStateChanged: vi.fn(),
+  signInAnonymously: vi.fn(),
   signInWithEmailAndPassword: vi.fn(),
   signOut: vi.fn(),
 }));

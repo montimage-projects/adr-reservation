@@ -2,8 +2,6 @@ import { useState, useEffect } from 'react'
 import { getReservations, getAvailableSlotsCount, updateReservationStatus } from '../lib/firebase'
 import LoadingSpinner from '../components/LoadingSpinner'
 import {
-  isFirstTimeSetup,
-  setupAdminPassword,
   loginAdmin,
   logoutAdmin,
   isAdminAuthenticated
@@ -19,10 +17,9 @@ export default function AdminPage() {
   const [isCheckingAuth, setIsCheckingAuth] = useState(true)
   const [error, setError] = useState(null)
   const [reservations, setReservations] = useState([])
-  const [firstTimeSetup, setFirstTimeSetup] = useState(false)
   const [loginForm, setLoginForm] = useState({
-    password: '',
-    confirmPassword: ''
+    email: '',
+    password: ''
   })
   const [formError, setFormError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
@@ -45,18 +42,12 @@ export default function AdminPage() {
     const checkAuth = async () => {
       setIsCheckingAuth(true)
       try {
-        // Check if this is the first time setup - now async
-        const isFirstTime = await isFirstTimeSetup()
-        
-        // Check if the user is already authenticated
+        // Firebase Auth session plus an admins/{uid} document
         const isAuth = await isAdminAuthenticated()
         setIsAuthenticated(isAuth)
-        setFirstTimeSetup(isFirstTime)
       } catch (error) {
         console.error('Error checking auth:', error)
         setIsAuthenticated(false)
-        // Default to first-time setup if there's an error
-        setFirstTimeSetup(true)
       } finally {
         setIsCheckingAuth(false)
       }
@@ -159,61 +150,16 @@ export default function AdminPage() {
     }))
   }
 
-  const handleSetupSubmit = async (e) => {
-    e.preventDefault()
-    setIsLoading(true)
-    setFormError('')
-    setSuccessMessage('')
-
-    try {
-      // Validate password
-      if (loginForm.password.length < 8) {
-        setFormError('Password must be at least 8 characters')
-        setIsLoading(false)
-        return
-      }
-
-      // Validate password confirmation
-      if (loginForm.password !== loginForm.confirmPassword) {
-        setFormError('Passwords do not match')
-        setIsLoading(false)
-        return
-      }
-
-      // Set up admin password - now returns success boolean
-      const success = await setupAdminPassword(loginForm.password)
-      
-      if (success) {
-        setSuccessMessage('Admin account created successfully!')
-        setIsAuthenticated(true)
-        setFirstTimeSetup(false)
-
-        // Reset form
-        setLoginForm({
-          password: '',
-          confirmPassword: ''
-        })
-      } else {
-        setFormError('Error setting up admin account. Please try again.')
-      }
-    } catch (error) {
-      console.error('Error setting up admin:', error)
-      setFormError('Error setting up admin account: ' + error.message)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
   const handleLoginSubmit = async (e) => {
     e.preventDefault()
     setIsLoading(true)
     setFormError('')
 
-    const { password } = loginForm
+    const { email, password } = loginForm
 
     try {
-      // Login with database-backed authentication
-      const result = await loginAdmin(password)
+      // Firebase Auth verifies the credentials
+      const result = await loginAdmin(email.trim(), password)
       if (result.success) {
         setIsAuthenticated(true)
         // Reset form
@@ -222,7 +168,7 @@ export default function AdminPage() {
           password: ''
         }))
       } else {
-        setFormError(result.message || 'Invalid password')
+        setFormError(result.message || 'Invalid email or password')
       }
     } catch (error) {
       console.error('Login error:', error)
@@ -232,8 +178,12 @@ export default function AdminPage() {
     }
   }
 
-  const handleLogout = () => {
-    logoutAdmin()
+  const handleLogout = async () => {
+    try {
+      await logoutAdmin()
+    } catch (error) {
+      console.error('Logout error:', error)
+    }
     setIsAuthenticated(false)
   }
 
@@ -377,70 +327,6 @@ export default function AdminPage() {
     )
   }
 
-  if (firstTimeSetup) {
-    return (
-      <div className="max-w-md mx-auto mt-10 card">
-        <div className="card-header">
-          <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Admin Setup</h2>
-        </div>
-        <div className="card-body">
-          <p className="text-gray-600 dark:text-gray-400 mb-4">
-            Welcome! Please set up an admin password to continue.
-          </p>
-
-          {formError && (
-            <div className="mb-4 p-3 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded">
-              {formError}
-            </div>
-          )}
-
-          <form onSubmit={handleSetupSubmit} className="space-y-4">
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Password
-              </label>
-              <input
-                type="password"
-                id="password"
-                name="password"
-                value={loginForm.password}
-                onChange={handleInputChange}
-                className="input"
-                required
-                minLength={8}
-              />
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Must be at least 8 characters long
-              </p>
-            </div>
-
-            <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Confirm Password
-              </label>
-              <input
-                type="password"
-                id="confirmPassword"
-                name="confirmPassword"
-                value={loginForm.confirmPassword}
-                onChange={handleInputChange}
-                className="input"
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="w-full btn-primary"
-            >
-              Set Password & Login
-            </button>
-          </form>
-        </div>
-      </div>
-    )
-  }
-
   if (!isAuthenticated) {
     return (
       <div className="max-w-md mx-auto mt-10 card">
@@ -449,7 +335,7 @@ export default function AdminPage() {
         </div>
         <div className="card-body">
           <p className="text-gray-600 dark:text-gray-400 mb-4">
-            Please enter your admin password to continue.
+            Sign in with your administrator email and password.
           </p>
 
           {formError && (
@@ -460,6 +346,22 @@ export default function AdminPage() {
 
           <form onSubmit={handleLoginSubmit} className="space-y-4">
             <div>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Email
+              </label>
+              <input
+                type="email"
+                id="email"
+                name="email"
+                autoComplete="username"
+                value={loginForm.email}
+                onChange={handleInputChange}
+                className="input"
+                required
+              />
+            </div>
+
+            <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                 Password
               </label>
@@ -467,6 +369,7 @@ export default function AdminPage() {
                 type="password"
                 id="password"
                 name="password"
+                autoComplete="current-password"
                 value={loginForm.password}
                 onChange={handleInputChange}
                 className="input"

@@ -1,7 +1,7 @@
 // Firebase configuration
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, query, where, orderBy, serverTimestamp, onSnapshot, limit, Timestamp, getCountFromServer } from 'firebase/firestore';
-import { getAuth, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { generateBookingReference } from './emailService';
 
 // Your web app's Firebase configuration
@@ -529,24 +529,31 @@ export async function getUserReservationCount(email) {
 }
 
 // Authentication functions
-export async function signIn(email, password) {
-  try {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    return { user: userCredential.user, success: true };
-  } catch (error) {
-    console.error('Error signing in:', error);
-    return { error: error.message, success: false };
-  }
+/**
+ * Keep every visitor signed in to Firebase Auth (docs/auth-model.md).
+ *
+ * Whenever there is no current user (first load, or after an admin signs out),
+ * sign in anonymously so Firestore rules see a stable `request.auth.uid`.
+ * Call once at app start. Returns the listener's unsubscribe function.
+ */
+export function startAnonymousSession() {
+  return onAuthStateChanged(auth, (user) => {
+    if (!user) {
+      signInAnonymously(auth).catch((error) => {
+        // Public slot reads still work without a session, so only log.
+        console.error('Anonymous sign-in failed:', error.code || error.message);
+      });
+    }
+  });
 }
 
-export async function logOut() {
-  try {
-    await signOut(auth);
-    return { success: true };
-  } catch (error) {
-    console.error('Error signing out:', error);
-    return { error: error.message, success: false };
-  }
+/**
+ * Resolve once Firebase Auth has restored any persisted session, then return
+ * the current user (or null).
+ */
+export async function getSignedInUser() {
+  await auth.authStateReady();
+  return auth.currentUser;
 }
 
 // Export Firebase instances for direct access if needed

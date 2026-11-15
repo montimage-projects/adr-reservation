@@ -1,14 +1,30 @@
-import { db } from './firebase';
+import { auth, db, getSignedInUser } from './firebase';
+import { signInAnonymously } from 'firebase/auth';
 import { collection, doc, getDoc, updateDoc, query, where, getDocs, orderBy, addDoc, deleteDoc } from 'firebase/firestore';
-import * as jose from 'jose';
 import { sendCancellationEmail } from './emailService';
 
-// Secret key for JWT signing - in production, use an environment variable
-const JWT_SECRET = import.meta.env.VITE_JWT_SECRET || 'user-secret-key';
+// Visitor sessions (docs/auth-model.md). The visitor's identity is their
+// Firebase Auth user, normally an anonymous one (see startAnonymousSession in
+// ./firebase). Entering a name and email only saves profile details; nothing
+// is signed in the browser.
 
 // Storage keys
-const USER_TOKEN_KEY = 'user_token';
-const USER_DATA_KEY = 'userData'; // Keep this for backward compatibility
+const USER_SESSION_KEY = 'user_session_uid'; // uid that entered the details
+const USER_DATA_KEY = 'userData'; // Profile details, kept to prefill bookings
+const LEGACY_USER_TOKEN_KEY = 'user_token'; // Old browser-signed token
+
+/**
+ * Return the current Firebase user, signing in anonymously when there is none.
+ * @returns {Promise<import('firebase/auth').User>}
+ */
+async function ensureSignedIn() {
+  const user = await getSignedInUser();
+  if (user) {
+    return user;
+  }
+  const credential = await signInAnonymously(auth);
+  return credential.user;
+}
 
 /**
  * Register a new user or update an existing one
@@ -17,6 +33,9 @@ const USER_DATA_KEY = 'userData'; // Keep this for backward compatibility
  */
 export async function registerUser(userData) {
   try {
+    // Firestore requests need a Firebase identity.
+    const user = await ensureSignedIn();
+
     // Normalize email to lowercase
     const email = userData.email.toLowerCase();
     
@@ -54,16 +73,14 @@ export async function registerUser(userData) {
       userId = docRef.id;
     }
 
-    // Store in localStorage for convenience (more secure would be HTTP-only cookies)
+    // Remember the details and which Firebase user entered them
     localStorage.setItem(USER_DATA_KEY, JSON.stringify(userData));
-
-    // Generate a token for the user
-    const token = await generateUserToken(userData, userId);
+    localStorage.setItem(USER_SESSION_KEY, user.uid);
+    localStorage.removeItem(LEGACY_USER_TOKEN_KEY);
 
     return {
       success: true,
       userData,
-      token,
       userId,
       isNewUser: !existingUser
     };
@@ -186,61 +203,32 @@ export function getCurrentUser() {
 }
 
 /**
- * Check if user has an active session
+ * Check if the visitor has an active session: a Firebase user is signed in
+ * and that same user entered their details on this browser.
  * @returns {Promise<boolean>} - Whether user is authenticated
  */
 export async function isUserAuthenticated() {
-  const token = localStorage.getItem(USER_TOKEN_KEY);
-
-  if (!token) {
-    return false;
-  }
-
   try {
-    // Verify token using jose library
-    const secret = new TextEncoder().encode(JWT_SECRET);
-    await jose.jwtVerify(token, secret);
-    return true;
+    const user = await getSignedInUser();
+    return Boolean(
+      user &&
+      localStorage.getItem(USER_SESSION_KEY) === user.uid &&
+      getCurrentUser()
+    );
   } catch (error) {
-    // Token is invalid or expired
-    console.error('User token verification failed:', error.message);
-    localStorage.removeItem(USER_TOKEN_KEY);
+    console.error('Error checking user session:', error.code || error.message);
     return false;
   }
 }
 
 /**
- * Log out current user
+ * Log out current user. The anonymous Firebase user is kept, so the visitor's
+ * identity (and anything linked to it) survives logging back in.
  */
 export function logoutUser() {
-  localStorage.removeItem(USER_TOKEN_KEY);
+  localStorage.removeItem(USER_SESSION_KEY);
+  localStorage.removeItem(LEGACY_USER_TOKEN_KEY);
   // Keep USER_DATA_KEY for convenience when booking again
-}
-
-/**
- * Generate JWT token for user
- * @param {Object} userData - User data
- * @param {string} userId - User ID
- * @returns {Promise<string>} - JWT token
- */
-async function generateUserToken(userData, userId) {
-  // Generate JWT token
-  const secret = new TextEncoder().encode(JWT_SECRET);
-  const token = await new jose.SignJWT({
-    role: 'user',
-    id: userId,
-    email: userData.email,
-    name: userData.name
-  })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
-    .setExpirationTime('30d') // Longer expiration for regular users
-    .sign(secret);
-
-  // Store token in localStorage
-  localStorage.setItem(USER_TOKEN_KEY, token);
-
-  return token;
 }
 
 export async function cancelReservation(reservationId, cancellationReason = 'User requested cancellation') {
