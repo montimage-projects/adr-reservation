@@ -124,7 +124,7 @@ export default function AdminPage() {
     setError(null);
     try {
       const data = await getReservations();
-      setReservations(sortReservations(data || []));
+      setReservations(data || []);
     } catch (err) {
       console.error('Error fetching reservations:', err);
       setError('Failed to load reservations. Please try again later.');

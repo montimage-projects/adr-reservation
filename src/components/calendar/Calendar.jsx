@@ -5,7 +5,7 @@ import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import { getAvailableSlots, subscribeToSlots } from '../../lib/firebase';
 import LoadingSpinner from '../LoadingSpinner';
-import { useTheme } from '../../utils/ThemeContext';
+import { useTheme } from '../../utils/useTheme';
 import './calendar.css';
 import { formatDate } from '../../utils/dateUtils';
 import { isSlotDisabled } from '../../lib/calendarUtils';
