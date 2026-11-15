@@ -98,7 +98,7 @@ The following files have been updated to use Firebase instead of Supabase:
 
 ## Testing
 
-After migration:
+After setting up the new Firebase project:
 
 1. Test all functionality in development environment:
    - Creating and managing slots
@@ -106,8 +106,8 @@ After migration:
    - Admin functionality
    - User authentication
 
-2. Verify data integrity:
-   - Ensure relationships between slots and reservations are maintained
+2. Verify new data:
+   - Ensure reservations created in the new project are linked to their slots
 
 ## Rollback Plan
 
