@@ -46,10 +46,10 @@ export async function getAvailableSlots(startDate, endDate) {
     const querySnapshot = await getDocs(q);
     const slots = [];
     
-    querySnapshot.forEach((doc) => {
-      const data = doc.data();
+    querySnapshot.forEach((docSnap) => {
+      const data = docSnap.data();
       slots.push({
-        id: doc.id,
+        id: docSnap.id,
         start_time: fromFirestoreTimestamp(data.start_time),
         end_time: fromFirestoreTimestamp(data.end_time),
         is_available: data.is_available,
@@ -136,10 +136,10 @@ export async function getReservations() {
     const reservations = [];
     const slotPromises = [];
     
-    querySnapshot.forEach((doc) => {
-      const data = doc.data();
+    querySnapshot.forEach((docSnap) => {
+      const data = docSnap.data();
       const reservation = {
-        id: doc.id,
+        id: docSnap.id,
         ...data,
         created_at: fromFirestoreTimestamp(data.created_at),
         updated_at: fromFirestoreTimestamp(data.updated_at)
@@ -180,10 +180,10 @@ export function subscribeToSlots(callback) {
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const slots = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
         slots.push({
-          id: doc.id,
+          id: docSnap.id,
           ...data,
           start_time: fromFirestoreTimestamp(data.start_time),
           end_time: fromFirestoreTimestamp(data.end_time),
@@ -475,10 +475,10 @@ export async function getUserReservationCount(email) {
     const reservations = [];
     const slotPromises = [];
     
-    querySnapshot.forEach((doc) => {
-      const data = doc.data();
+    querySnapshot.forEach((docSnap) => {
+      const data = docSnap.data();
       const reservation = {
-        id: doc.id,
+        id: docSnap.id,
         ...data,
         created_at: fromFirestoreTimestamp(data.created_at),
         updated_at: fromFirestoreTimestamp(data.updated_at)
