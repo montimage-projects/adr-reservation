@@ -157,7 +157,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('firestore.rules (emulator
     }
 
     it('slot queries return taken-or-free slots only as filtered (no is_available read rule)', async () => {
-      // A query that does not filter on is_available (checkSlotsExist, #11).
+      // A query that does not filter on is_available is still allowed.
       await assertSucceeds(getDocs(query(collection(db.anyone, 'slots'), where('start_time', '>=', Timestamp.now()))));
       // verifySlotAvailability reads a taken slot by id.
       const snap = await assertSucceeds(getDoc(doc(db.anyone, 'slots', 'taken-a')));
