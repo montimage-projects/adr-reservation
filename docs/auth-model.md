@@ -19,8 +19,10 @@ but the app never signs in to Firebase Auth:
   `localStorage`.
 
 So `request.auth` is always `null`, no request carries the admin claim, and
-every rule that needs an identity denies the app's own calls. Only the public
-reads of available slots work.
+every rule that needs an identity denies the app's own calls. Only two kinds of
+request get through: public reads of available slots, and reservation creates,
+which the draft opens with `allow create: if true`. So today a booking writes
+the reservation but cannot mark its slot unavailable.
 
 ## Decision
 
@@ -219,7 +221,7 @@ Conventions used in the table:
 | One-reservation limit | `getUserReservationCount` | Visitor (anonymous uid) | Same read rule; query by `user_uid` + `status` (index in #7). Optional email lock: see *One-reservation limit*. |
 | Admin setup | none in the app (console) | Firebase console operator | No rule: the console creates the Auth user and the `admins/{uid}` document. `admins` is `allow write: if false` for clients. |
 | Admin login and logout | `AdminPage` login form (#6 replaces `loginAdmin` / `logoutAdmin`) | Admin (email/password) | `signInWithEmailAndPassword`; the UI treats the user as admin only if `getDoc(admins/{uid})` exists (allowed by the `admins` read rule). Logout calls `signOut()`; visitor pages then sign in anonymously again. The real enforcement is `isAdmin()` in every admin rule, not the UI check. |
-| Admin slot CRUD | `createSlot`, `updateSlot`, `deleteSlot`, `resetSlotAvailability` (`AdminSlotPage`, `AdminPage`) | Admin | Slots `allow create, update, delete: if isAdmin()`, alongside the narrow visitor update above. |
+| Admin slot CRUD | `createSlot`, `updateSlot`, `deleteSlot` (`AdminSlotPage`), plus `resetSlotAvailability`, an internal helper of `deleteReservation` (which has no UI caller today) | Admin | Slots `allow create, update, delete: if isAdmin()`, alongside the narrow visitor update above. |
 | Admin reservation list, status changes, deletion | `getReservations`, `updateReservationStatus`, `deleteReservation`, the reservation query in `deleteSlot` | Admin | Reservations `allow read, update, delete: if isAdmin()`. |
 | Settings | `settings/*` (today only `admin_password_hash`, removed by #6) | Admin | `match /settings/{settingId} { allow read, write: if isAdmin(); }`. Nothing public reads settings. |
 | Anything else | | | No catch-all `match /{document=**}` rule; unmatched paths are denied by default. |
