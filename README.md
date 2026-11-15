@@ -93,6 +93,25 @@ src/
 ├── utils/        # Helper functions
 ```
 
+## 🧪 Testing
+
+Unit tests use [Vitest](https://vitest.dev/) with a jsdom environment. Test
+files sit next to the code they cover and end in `.test.js` or `.test.jsx`.
+
+```bash
+# Run the whole suite once (CI runs this on every pull request)
+npm test
+
+# Run a single test file
+npx vitest run src/lib/validationUtils.test.js
+```
+
+Tests must never need real credentials or network access. Vitest loads your
+local `.env*` files, so a test that reaches the real Firebase SDK could pass on
+your machine and fail in CI. Mock the SDK modules instead, for example
+`vi.mock('firebase/firestore')`, and import `describe`, `it`, `expect` and `vi`
+from `vitest`.
+
 ## 🛡️ Security Features
 
 - Firestore security rules
@@ -103,6 +122,7 @@ src/
 ## 🎯 Tech Stack
 
 - **Frontend**: React, Vite
+- **Testing**: Vitest, jsdom
 - **Styling**: Tailwind CSS, Material Tailwind
 - **Backend**: Firebase (Firestore, Authentication)
 - **Authentication**: JWT

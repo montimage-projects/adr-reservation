@@ -25,4 +25,8 @@ export default defineConfig({
       include: [/node_modules/],
     },
   },
+  // Vitest (npm test). jsdom lets component tests render without a browser.
+  test: {
+    environment: 'jsdom',
+  },
 })

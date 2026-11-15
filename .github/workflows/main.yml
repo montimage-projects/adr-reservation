@@ -1,7 +1,8 @@
 name: CI
 
-# Build check only. Deploys come from the hosting provider's Git integration
-# (Netlify today, Vercel after cutover), so this workflow never deploys.
+# Lint, test and build checks only. Deploys come from the hosting provider's
+# Git integration (Netlify today, Vercel after cutover), so this workflow
+# never deploys.
 
 on:
   push:
@@ -30,7 +31,8 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Test
+        run: npm test
+
       - name: Build
         run: npm run build
-
-      # Add a Test step (npm test) once a test runner is set up.
