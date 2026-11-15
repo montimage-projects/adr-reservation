@@ -1,46 +1,163 @@
 rules_version = '2';
+
+// Firestore rules for the auth model in docs/auth-model.md:
+// - visitors use Firebase anonymous auth, admins use email/password;
+// - an admin is a signed-in user whose admins/{uid} document exists;
+// - no custom claims, and no catch-all match: unmatched paths are denied.
+//
+// Booking and cancellation bind the reservation and its slot in both
+// directions, so each must run as one batch or transaction. Tests:
+// src/lib/firestore.rules.test.js (emulator) and src/lib/firestoreConfig.test.js.
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow admin access to everything
-    match /{document=**} {
-      allow read, write: if request.auth != null && request.auth.token.role == 'admin';
+
+    function isSignedIn() {
+      return request.auth != null;
     }
-    
-    // Slots collection
-    match /slots/{slotId} {
-      // Anyone can read available slots
-      allow read: if resource.data.is_available == true;
-      
-      // Only authenticated users can create or update slots
-      allow create, update: if request.auth != null;
+
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
-    
-    // Reservations collection
-    match /reservations/{reservationId} {
-      // Users can read their own reservations
-      allow read: if request.auth != null && 
-                   resource.data.user_email == request.auth.token.email;
-                   
-      // Anyone can create a reservation (we validate in the application)
-      allow create: if true;
-      
-      // Only the owner or admin can update or delete a reservation
-      allow update, delete: if request.auth != null && 
-                             (resource.data.user_email == request.auth.token.email || 
-                              request.auth.token.role == 'admin');
+
+    function slotPath(id) {
+      return /databases/$(database)/documents/slots/$(id);
     }
-    
-    // Users collection
-    match /users/{userId} {
-      // Users can read and write their own data
-      allow read, write: if request.auth != null && 
-                          resource.data.email == request.auth.token.email;
+
+    function resPath(id) {
+      return /databases/$(database)/documents/reservations/$(id);
     }
-    
-    // Settings collection
+
+    // A string of min..max characters.
+    function isText(value, min, max) {
+      return value is string && value.size() >= min && value.size() <= max;
+    }
+
+    // Stored lowercased (#10) and within the RFC 5321 length limit.
+    function isEmail(value) {
+      return isText(value, 3, 254) && value == value.lower();
+    }
+
+    // Keys createReservation writes, no more and no less.
+    function reservationFields() {
+      return ['slot_id', 'user_uid', 'user_name', 'user_email', 'group_id', 'notes', 'status', 'reference', 'created_at'];
+    }
+
+    // Keys of a users/{uid} profile after registerUser's merge write.
+    function profileFields() {
+      return ['name', 'email', 'group_id', 'created_at', 'updated_at'];
+    }
+
+    // Caps match src/lib/validationUtils.js. group_id is optional ('' allowed).
+    function validReservation(data) {
+      return data.keys().hasOnly(reservationFields())
+        && data.keys().hasAll(reservationFields())
+        && isText(data.slot_id, 1, 1500)
+        && isText(data.user_name, 1, 200)
+        && isEmail(data.user_email)
+        && isText(data.group_id, 0, 100)
+        && isText(data.notes, 0, 500)
+        && isText(data.reference, 1, 100)
+        && data.status == 'confirmed'
+        && data.created_at == request.time;
+    }
+
+    // registerUser writes ISO-8601 strings from Date.toISOString().
+    function isIsoTime(value) {
+      return value is string && value.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z');
+    }
+
+    function validProfile() {
+      let data = request.resource.data;
+      return data.keys().hasOnly(profileFields())
+        && data.keys().hasAll(profileFields())
+        && isText(data.name, 1, 200)
+        && isEmail(data.email)
+        && isText(data.group_id, 0, 100)
+        && isIsoTime(data.created_at)
+        && isIsoTime(data.updated_at)
+        && (resource == null || data.created_at == resource.data.created_at);
+    }
+
+    // The only slot fields a non-admin may change.
+    function onlyAvailabilityChanges() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['is_available', 'reservation_id']);
+    }
+
+    // Booking: take a free slot for a reservation that the same write creates
+    // for this slot and this user. A free slot may have no reservation_id
+    // field at all, so its stored value is not checked.
+    function visitorBooksSlot(slotId) {
+      let rid = request.resource.data.reservation_id;
+      return isSignedIn()
+        && onlyAvailabilityChanges()
+        && resource.data.is_available == true
+        && request.resource.data.is_available == false
+        && rid is string
+        && !exists(resPath(rid))
+        && getAfter(resPath(rid)).data.slot_id == slotId
+        && getAfter(resPath(rid)).data.user_uid == request.auth.uid;
+    }
+
+    // Cancellation: free a slot whose confirmed reservation belongs to this
+    // user and is deleted by the same write.
+    function visitorReleasesSlot(slotId) {
+      let rid = resource.data.get('reservation_id', null);
+      return isSignedIn()
+        && onlyAvailabilityChanges()
+        && resource.data.is_available == false
+        && request.resource.data.is_available == true
+        && request.resource.data.reservation_id == null
+        && rid is string
+        && get(resPath(rid)).data.slot_id == slotId
+        && get(resPath(rid)).data.user_uid == request.auth.uid
+        && get(resPath(rid)).data.status == 'confirmed'
+        && !existsAfter(resPath(rid));
+    }
+
+    match /admins/{adminId} {
+      allow read: if isSignedIn() && request.auth.uid == adminId;
+      allow write: if false;
+    }
+
     match /settings/{settingId} {
-      // Only admins can read and write settings
-      allow read, write: if request.auth != null && request.auth.token.role == 'admin';
+      allow read, write: if isAdmin();
+    }
+
+    match /slots/{slotId} {
+      // Slot documents hold no personal data.
+      allow read: if true;
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || visitorBooksSlot(slotId) || visitorReleasesSlot(slotId);
+    }
+
+    match /reservations/{reservationId} {
+      // Queries must filter user_uid == the caller's uid. Reservations without
+      // user_uid (made before #7) are visible to admins only.
+      allow read: if isAdmin() || (isSignedIn() && resource.data.user_uid == request.auth.uid);
+
+      // The same write must take the free slot and point it at this reservation.
+      allow create: if isSignedIn()
+        && validReservation(request.resource.data)
+        && request.resource.data.user_uid == request.auth.uid
+        && get(slotPath(request.resource.data.slot_id)).data.is_available == true
+        && getAfter(slotPath(request.resource.data.slot_id)).data.is_available == false
+        && getAfter(slotPath(request.resource.data.slot_id)).data.reservation_id == reservationId;
+
+      allow update: if isAdmin();
+
+      // A visitor deletes only their own confirmed reservation, and only in
+      // the same write that frees its slot.
+      allow delete: if isAdmin() || (isSignedIn()
+        && resource.data.user_uid == request.auth.uid
+        && resource.data.status == 'confirmed'
+        && get(slotPath(resource.data.slot_id)).data.get('reservation_id', null) == reservationId
+        && getAfter(slotPath(resource.data.slot_id)).data.is_available == true);
+    }
+
+    match /users/{userId} {
+      // Reads never touch request.resource, which is null on a read.
+      allow read: if (isSignedIn() && request.auth.uid == userId) || isAdmin();
+      allow create, update: if isSignedIn() && request.auth.uid == userId && validProfile();
     }
   }
 }
