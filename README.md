@@ -118,6 +118,26 @@ your machine and fail in CI. Mock the SDK modules instead, for example
 `vi.mock('firebase/firestore')`, and import `describe`, `it`, `expect` and `vi`
 from `vitest`.
 
+### Firestore rules tests (emulator)
+
+`src/lib/firestore.rules.test.js` runs every app query and write against
+`firestore.rules` in the Firestore emulator, as an anonymous visitor, an
+email/password user and an admin. It needs:
+
+- Java 21 or later on your `PATH` (the emulator is a Java program)
+- the Firebase CLI (`npm install -g firebase-tools`)
+
+```bash
+npm run test:rules
+```
+
+The script starts the emulator for a fake project (`demo-adr`), so no Firebase
+project or credentials are involved. Without a running emulator
+(`FIRESTORE_EMULATOR_HOST` unset) these tests are skipped, which is what plain
+`npm test` and CI do. `src/lib/firestoreConfig.test.js` runs everywhere and
+checks the rules' shape, the payload keys and that `firestore.indexes.json`
+covers every composite query the app runs (the emulator ignores indexes).
+
 ## 🛡️ Security Features
 
 - Firestore security rules
