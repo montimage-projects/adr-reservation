@@ -6,7 +6,9 @@ This document outlines the steps needed to complete the migration from Supabase 
 
 1. Create a Firebase project at [https://console.firebase.google.com/](https://console.firebase.google.com/)
 2. Enable Firestore Database in your Firebase project
-3. Set up Firebase Authentication if you plan to use it
+3. Enable Firebase Authentication with the Anonymous and Email/Password
+   providers, and create the first admin as described in
+   [`docs/auth-model.md`](docs/auth-model.md)
 
 ## Configuration Steps
 
@@ -21,9 +23,6 @@ VITE_FIREBASE_STORAGE_BUCKET=your-project-id.appspot.com
 VITE_FIREBASE_MESSAGING_SENDER_ID=your-messaging-sender-id
 VITE_FIREBASE_APP_ID=your-app-id
 VITE_FIREBASE_MEASUREMENT_ID=your-measurement-id
-
-# Keep existing configuration
-VITE_JWT_SECRET=your-existing-jwt-secret
 
 # Email.js configuration (unchanged)
 VITE_EMAILJS_SERVICE_ID=your-service-id

@@ -76,12 +76,18 @@ VITE_FIREBASE_STORAGE_BUCKET=your-project-id.appspot.com
 VITE_FIREBASE_MESSAGING_SENDER_ID=your-messaging-sender-id
 VITE_FIREBASE_APP_ID=your-app-id
 VITE_FIREBASE_MEASUREMENT_ID=your-measurement-id
-VITE_JWT_SECRET=your-jwt-secret
 VITE_EMAILJS_SERVICE_ID=
 VITE_EMAILJS_PUBLIC_KEY=
 VITE_EMAILJS_CANCELLATION_TEMPLATE_ID=adr_reservation_cancel
 VITE_EMAILJS_CONFIRMATION_TEMPLATE_ID=adr_reservation_confirm
 ```
+
+### Admin accounts
+
+There is no in-app admin password setup. In the Firebase console, enable the
+**Anonymous** and **Email/Password** sign-in providers, create the admin user,
+then add an `admins/{uid}` document for that user. The steps are in
+[`docs/auth-model.md`](docs/auth-model.md#bootstrapping-the-first-admin-no-admin-sdk).
 
 ## 🏗️ Project Structure
 
@@ -115,8 +121,9 @@ from `vitest`.
 ## 🛡️ Security Features
 
 - Firestore security rules
-- JWT authentication
-- Secure password hashing
+- Firebase Authentication: anonymous sessions for visitors, email/password
+  for admins (no signing secrets in the browser bundle)
+- Admin passwords are stored and verified by Firebase Auth
 - Protected admin routes
 
 ## 🎯 Tech Stack
@@ -125,7 +132,7 @@ from `vitest`.
 - **Testing**: Vitest, jsdom
 - **Styling**: Tailwind CSS, Material Tailwind
 - **Backend**: Firebase (Firestore, Authentication)
-- **Authentication**: JWT
+- **Authentication**: Firebase Authentication
 - **Email**: EmailJS
 
 ## 📄 License

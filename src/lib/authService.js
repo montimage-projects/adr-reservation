@@ -1,136 +1,94 @@
-import * as jose from 'jose';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db, logOut } from './firebase';
+import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db, getSignedInUser } from './firebase';
 
-// Secret key for JWT signing - in production, use an environment variable
-const JWT_SECRET = import.meta.env.VITE_JWT_SECRET || 'admin-secret-key';
+// Admin authentication (docs/auth-model.md).
+//
+// Firebase Auth verifies the admin's email and password and stores the
+// password hash; nothing is hashed, signed or stored by this app. A signed-in
+// user is an admin only when the document `admins/{uid}` exists. Admins are
+// created in the Firebase console, so there is no in-app password setup.
+// Firestore rules enforce admin access with the same check; the UI check
+// below only decides what to show.
 
-// Store for auth token
-const TOKEN_KEY = 'admin_token';
+const LOGIN_FAILED = 'Invalid email or password';
+const NOT_ADMIN = 'This account does not have administrator access';
 
-// Settings key for admin password hash in database
-const ADMIN_PASSWORD_KEY = 'admin_password_hash';
+const CREDENTIAL_ERRORS = new Set([
+  'auth/invalid-credential',
+  'auth/invalid-email',
+  'auth/invalid-login-credentials',
+  'auth/user-disabled',
+  'auth/user-not-found',
+  'auth/wrong-password',
+]);
 
-// Check if admin password has been set up in the database
-export async function isFirstTimeSetup() {
-  try {
-    const settingsRef = doc(db, 'settings', ADMIN_PASSWORD_KEY);
-    const docSnap = await getDoc(settingsRef);
-    
-    if (!docSnap.exists()) {
-      console.log('Admin password not set up yet');
-      return true;
-    }
-    
-    const data = docSnap.data();
-    
-    // If value is empty string, it means password hasn't been set
-    return !data || !data.value;
-  } catch (err) {
-    console.error('Error in isFirstTimeSetup:', err);
-    return true;
-  }
-}
-
-export async function setupAdminPassword(password) {
-  try {
-    // In a real application, use a proper hashing library like bcrypt
-    // For this demo, we'll use a simple hash function
-    const hashedPassword = hashPassword(password);
-    
-    // Update the admin password hash in the settings collection
-    const settingsRef = doc(db, 'settings', ADMIN_PASSWORD_KEY);
-    await setDoc(settingsRef, { 
-      value: hashedPassword, 
-      updated_at: new Date().toISOString() 
-    });
-    
-    return true;
-  } catch (err) {
-    console.error('Error in setupAdminPassword:', err);
+/**
+ * Whether `user` is a non-anonymous Firebase user with an `admins/{uid}` doc.
+ * Throws if the admin document cannot be read.
+ */
+async function hasAdminDoc(user) {
+  if (!user || user.isAnonymous) {
     return false;
   }
+  const adminSnap = await getDoc(doc(db, 'admins', user.uid));
+  return adminSnap.exists();
 }
 
-export async function loginAdmin(password) {
+/**
+ * Sign an admin in with Firebase Auth email/password.
+ * @returns {Promise<{success: boolean, message?: string}>}
+ */
+export async function loginAdmin(email, password) {
+  let user;
   try {
-    // Get the stored password hash from the database
-    const settingsRef = doc(db, 'settings', ADMIN_PASSWORD_KEY);
-    const docSnap = await getDoc(settingsRef);
-    
-    if (!docSnap.exists()) {
-      return { success: false, message: 'Admin account not set up' };
+    const credential = await signInWithEmailAndPassword(auth, email, password);
+    user = credential.user;
+  } catch (error) {
+    if (CREDENTIAL_ERRORS.has(error.code)) {
+      return { success: false, message: LOGIN_FAILED };
     }
-    
-    const data = docSnap.data();
-    
-    if (!data || !data.value) {
-      return { success: false, message: 'Admin account not set up' };
+    if (error.code === 'auth/too-many-requests') {
+      return { success: false, message: 'Too many attempts. Please try again later.' };
     }
-    
-    const storedHash = data.value;
-    const hashedPassword = hashPassword(password);
-    
-    if (hashedPassword === storedHash) {
-      // Generate JWT token using jose library (browser compatible)
-      const secret = new TextEncoder().encode(JWT_SECRET);
-      const token = await new jose.SignJWT({ role: 'admin' })
-        .setProtectedHeader({ alg: 'HS256' })
-        .setIssuedAt()
-        .setExpirationTime('1h')
-        .sign(secret);
-      
-      // Store token in localStorage
-      localStorage.setItem(TOKEN_KEY, token);
-      
-      return { success: true, token };
-    }
-    
-    return { success: false, message: 'Invalid password' };
-  } catch (err) {
-    console.error('Error in loginAdmin:', err);
+    console.error('Admin sign-in failed:', error.code || error.message);
     return { success: false, message: 'Authentication error' };
   }
+
+  let isAdmin = false;
+  try {
+    isAdmin = await hasAdminDoc(user);
+  } catch (error) {
+    console.error('Admin check failed:', error.code || error.message);
+  }
+
+  if (!isAdmin) {
+    // Do not keep a non-admin email/password session around.
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error('Sign-out after failed admin check failed:', error.code || error.message);
+    }
+    return { success: false, message: NOT_ADMIN };
+  }
+
+  return { success: true };
 }
 
 export async function logoutAdmin() {
-  localStorage.removeItem(TOKEN_KEY);
-  await logOut();
+  await signOut(auth);
 }
 
+/**
+ * Whether the current Firebase user is an admin. Waits for a persisted session
+ * to be restored, so a page reload does not log the admin out.
+ */
 export async function isAdminAuthenticated() {
-  const token = localStorage.getItem(TOKEN_KEY);
-
-  if (!token) {
-    return false;
-  }
-
   try {
-    // Verify token using jose library
-    const secret = new TextEncoder().encode(JWT_SECRET);
-    await jose.jwtVerify(token, secret);
-    return true;
+    const user = await getSignedInUser();
+    return await hasAdminDoc(user);
   } catch (error) {
-    // Token is invalid or expired
-    console.error('Auth token verification failed:', error.message);
-    localStorage.removeItem(TOKEN_KEY);
+    console.error('Admin check failed:', error.code || error.message);
     return false;
   }
-}
-
-export function getAuthToken() {
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-// Simple password hashing function (for demo purposes only)
-// In production, use a proper hashing library like bcrypt
-function hashPassword(password) {
-  // This is NOT secure, just for demonstration
-  let hash = 0;
-  for (let i = 0; i < password.length; i++) {
-    const char = password.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
-  }
-  return hash.toString(16);
 }
