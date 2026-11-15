@@ -87,7 +87,7 @@ export async function createReservation(slotId, userData) {
     const reservationData = {
       slot_id: slotId,
       user_name: userData.name,
-      user_email: userData.email,
+      user_email: userData.email?.toLowerCase(),
       group_id: userData.groupId,
       notes: userData.notes,
       status: 'confirmed',
