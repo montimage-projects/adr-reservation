@@ -67,7 +67,7 @@ export default function AdminSlotPage() {
       setSlots(data);
     } catch (err) {
       console.error('Error fetching slots:', err);
-      setError(err.message || 'Failed to load slots. Make sure your service key is configured.');
+      setError(err.message || 'Failed to load slots.');
     } finally {
       setIsLoading(false);
     }
@@ -162,7 +162,7 @@ export default function AdminSlotPage() {
       await fetchSlots();
     } catch (err) {
       console.error('Error creating slots:', err);
-      setError(err.message || 'Failed to create slots. Make sure your service key is configured.');
+      setError(err.message || 'Failed to create slots.');
     } finally {
       setIsLoading(false);
     }
@@ -183,7 +183,7 @@ export default function AdminSlotPage() {
       await fetchSlots();
     } catch (err) {
       console.error('Error updating slot:', err);
-      setError(err.message || 'Failed to update slot. Make sure your service key is configured.');
+      setError(err.message || 'Failed to update slot.');
     } finally {
       setIsLoading(false);
     }
@@ -253,7 +253,7 @@ export default function AdminSlotPage() {
       await fetchSlots();
     } catch (err) {
       console.error('Error deleting all slots:', err);
-      setError(err.message || 'Failed to delete slots. Make sure your service key is configured.');
+      setError(err.message || 'Failed to delete slots.');
     } finally {
       setIsLoading(false);
     }

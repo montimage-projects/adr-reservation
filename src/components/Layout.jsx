@@ -83,9 +83,7 @@ export default function Layout() {
               alert('Something went wrong with the created slots. Please try again.');
             }
           } catch (slotErr) {
-            if (slotErr.message && slotErr.message.includes('Service key not configured')) {
-              alert('Admin permissions required. Please add a service key in your .env.local file.');
-            } else if (slotErr.code === '42501') {
+            if (slotErr.code === 'permission-denied') {
               alert('Permission denied. Your application lacks necessary database permissions.');
             } else {
               alert(`Error creating test slots: ${slotErr.message || 'Unknown error'}`);
@@ -105,9 +103,7 @@ export default function Layout() {
               await createTestSlots();
               alert('Test slots created successfully! Please try booking again.');
             } catch (slotErr) {
-              if (slotErr.message && slotErr.message.includes('Service key not configured')) {
-                alert('Admin permissions required. Please add a service key in your .env.local file.');
-              } else if (slotErr.code === '42501') {
+              if (slotErr.code === 'permission-denied') {
                 alert('Permission denied. Your application lacks necessary database permissions.');
               } else {
                 alert(`Error creating test slots: ${slotErr.message || 'Unknown error'}`);

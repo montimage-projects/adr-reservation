@@ -136,11 +136,7 @@ export default function AdminPage() {
       setReservations(sortReservations(data || []));
     } catch (err) {
       console.error('Error fetching reservations:', err);
-      if (err.message && err.message.includes('Service key not configured')) {
-        setError('Admin access requires a service key. Please configure VITE_SUPABASE_SERVICE_KEY in your .env.local file.');
-      } else {
-        setError('Failed to load reservations. Please try again later.');
-      }
+      setError('Failed to load reservations. Please try again later.');
     } finally {
       setIsLoading(false);
     }
@@ -509,11 +505,8 @@ export default function AdminPage() {
 
       {error && (
         <div className="p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded-md text-red-600 dark:text-red-400">
-          <p className="font-medium">Service Key Required</p>
+          <p className="font-medium">Something went wrong</p>
           <p className="mt-1">{error}</p>
-          <p className="mt-2 text-sm">
-            See the <code className="bg-red-100 dark:bg-red-800/50 px-1 py-0.5 rounded">dev-docs/supabase-setup.md</code> file for instructions.
-          </p>
         </div>
       )}
 
@@ -612,7 +605,7 @@ export default function AdminPage() {
             <div className="card-body">
               {error ? (
                 <div className="text-center text-gray-600 dark:text-gray-400 py-4">
-                  Configure service key to view reservations
+                  Reservations could not be loaded
                 </div>
               ) : reservations.length > 0 ? (
                 <div className="overflow-x-auto">

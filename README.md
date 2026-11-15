@@ -3,7 +3,7 @@
 <div align="center">
   <img src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React" />
   <img src="https://img.shields.io/badge/Vite-B73BFE?style=for-the-badge&logo=vite&logoColor=FFD62E" alt="Vite" />
-  <img src="https://img.shields.io/badge/Supabase-181818?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase" />
+  <img src="https://img.shields.io/badge/Firebase-FFCA28?style=for-the-badge&logo=firebase&logoColor=black" alt="Firebase" />
   <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind CSS" />
 </div>
 
@@ -58,9 +58,9 @@ npm run dev
 
 ## 📋 Prerequisites
 
-- Node.js (v14 or higher)
+- Node.js (v20 or higher)
 - npm or yarn
-- Supabase account
+- Firebase project with Firestore enabled
 - Modern web browser
 - EmailJS
 
@@ -69,9 +69,13 @@ npm run dev
 Create a `.env.local` file with:
 
 ```env
-VITE_SUPABASE_URL=your-supabase-url
-VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
-VITE_SUPABASE_SERVICE_KEY=your-service-role-key
+VITE_FIREBASE_API_KEY=your-api-key
+VITE_FIREBASE_AUTH_DOMAIN=your-project-id.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=your-project-id
+VITE_FIREBASE_STORAGE_BUCKET=your-project-id.appspot.com
+VITE_FIREBASE_MESSAGING_SENDER_ID=your-messaging-sender-id
+VITE_FIREBASE_APP_ID=your-app-id
+VITE_FIREBASE_MEASUREMENT_ID=your-measurement-id
 VITE_JWT_SECRET=your-jwt-secret
 VITE_EMAILJS_SERVICE_ID=
 VITE_EMAILJS_PUBLIC_KEY=
@@ -91,7 +95,7 @@ src/
 
 ## 🛡️ Security Features
 
-- Row Level Security (RLS)
+- Firestore security rules
 - JWT authentication
 - Secure password hashing
 - Protected admin routes
@@ -100,7 +104,7 @@ src/
 
 - **Frontend**: React, Vite
 - **Styling**: Tailwind CSS, Material Tailwind
-- **Backend**: Supabase
+- **Backend**: Firebase (Firestore, Authentication)
 - **Authentication**: JWT
 - **Email**: EmailJS
 
@@ -111,7 +115,7 @@ This project is licensed under the MONTIMAGE License
 
 - [React](https://reactjs.org/) - UI Framework
 - [Vite](https://vitejs.dev/) - Build Tool
-- [Supabase](https://supabase.io/) - Backend Service
+- [Firebase](https://firebase.google.com/) - Backend Service
 - [Tailwind CSS](https://tailwindcss.com/) - Styling
 - [Material Tailwind](https://www.material-tailwind.com/) - UI Components
 

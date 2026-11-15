@@ -105,19 +105,11 @@ After migration:
 
 ## Rollback Plan
 
-If issues are encountered:
-
-1. Keep the Supabase implementation files as backups
-2. Revert to using Supabase by restoring the original files and configuration
+The Supabase project no longer exists, so there is no switching back. If the
+Firebase release has problems, revert the migration commit on `main`; the
+hosting provider redeploys the previous build.
 
 ## Cleanup
 
-After successful migration and testing:
-
-1. Remove Supabase dependencies:
-```bash
-npm uninstall @supabase/supabase-js @supabase/auth-helpers-nextjs @supabase/auth-ui-react
-```
-
-2. Remove Supabase configuration from `.env.local`
-3. Delete or archive Supabase-specific files that are no longer needed
+Done: the Supabase client, its dependencies and its configuration have been
+removed. Delete any `VITE_SUPABASE_*` entries left in your local `.env.local`.

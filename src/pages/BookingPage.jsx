@@ -292,11 +292,7 @@ export default function BookingPage() {
       console.error('Booking error:', err)
 
       // Handle specific permissions errors
-      if (err.message && err.message.includes('Service key not configured')) {
-        setSubmitError(
-          'Admin permissions required. Please add a service key in your .env.local file to complete bookings.'
-        )
-      } else if (err.code === '42501') {
+      if (err.code === 'permission-denied') {
         setSubmitError(
           'Permission denied. The application lacks necessary database permissions for completing bookings.'
         )
