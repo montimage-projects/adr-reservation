@@ -45,6 +45,12 @@ settings are recreated in the new project rather than copied from Supabase.
 
 ## Firestore Security Rules
 
+> **Superseded.** The auth model is decided in
+> [`docs/auth-model.md`](docs/auth-model.md) (issue #5): anonymous Firebase
+> Auth for visitors, email/password for admins, and an `admins/{uid}`
+> allowlist instead of a `role` custom claim. The snippet below is the old
+> draft, kept until #7 rewrites `firestore.rules` to that model.
+
 Set up appropriate security rules in your Firebase console. Here's a starting point:
 
 ```
