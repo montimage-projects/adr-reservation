@@ -17,6 +17,7 @@ const h = vi.hoisted(() => {
     auth: { currentUser: null, authStateReady: () => Promise.resolve() },
     queries: [],
     batches: [],
+    transactions: [],
     current: null,
     existingProfile: false,
     autoId: 0,
@@ -39,6 +40,26 @@ vi.mock('firebase/auth', () => ({
 
 vi.mock('firebase/firestore', () => {
   const emptySnapshot = { empty: true, size: 0, docs: [], forEach: () => {} };
+  const readDoc = async (ref) => {
+    if (ref.path.startsWith('slots/')) {
+      const date = new Date(Date.now() + 86400000);
+      return {
+        id: ref.id,
+        exists: () => true,
+        data: () => ({
+          start_time: { toDate: () => date },
+          end_time: { toDate: () => date },
+          created_at: { toDate: () => date },
+          is_available: true,
+          reservation_id: null,
+        }),
+      };
+    }
+    if (ref.path.startsWith('users/') && h.existingProfile) {
+      return { id: ref.id, exists: () => true, data: () => ({}) };
+    }
+    return { id: ref.id, exists: () => false, data: () => undefined };
+  };
   return {
     getFirestore: vi.fn(() => ({ name: 'test-db' })),
     collection: vi.fn((db, name) => ({ type: 'collection', path: name })),
@@ -50,26 +71,7 @@ vi.mock('firebase/firestore', () => {
       }
       return { path: `${name}/${id}`, id };
     }),
-    getDoc: vi.fn(async (ref) => {
-      if (ref.path.startsWith('slots/')) {
-        const date = new Date(Date.now() + 86400000);
-        return {
-          id: ref.id,
-          exists: () => true,
-          data: () => ({
-            start_time: { toDate: () => date },
-            end_time: { toDate: () => date },
-            created_at: { toDate: () => date },
-            is_available: true,
-            reservation_id: null,
-          }),
-        };
-      }
-      if (ref.path.startsWith('users/') && h.existingProfile) {
-        return { id: ref.id, exists: () => true, data: () => ({}) };
-      }
-      return { id: ref.id, exists: () => false, data: () => undefined };
-    }),
+    getDoc: vi.fn(readDoc),
     getDocs: vi.fn(async () => emptySnapshot),
     getCountFromServer: vi.fn(async () => ({ data: () => ({ count: 0 }) })),
     onSnapshot: vi.fn(() => () => {}),
@@ -81,6 +83,11 @@ vi.mock('firebase/firestore', () => {
       const batch = { set: vi.fn(), update: vi.fn(), delete: vi.fn(), commit: vi.fn(async () => {}) };
       h.batches.push(batch);
       return batch;
+    }),
+    runTransaction: vi.fn(async (db, updateFunction) => {
+      const transaction = { get: vi.fn(readDoc), set: vi.fn(), update: vi.fn(), delete: vi.fn() };
+      h.transactions.push(transaction);
+      return updateFunction(transaction);
     }),
     query: vi.fn((ref, ...constraints) => {
       const captured = { fn: h.current, collection: ref.path, constraints };
@@ -357,16 +364,18 @@ describe('firestore.indexes.json covers the queries src/lib runs', () => {
 });
 
 describe('write payloads match the key lists in firestore.rules', () => {
-  it('createReservation writes the reservation and takes the slot in one batch', () => {
+  it('createReservation writes the reservation and takes the slot in one transaction', () => {
     const ruleKeys = rulesKeyList('reservationFields');
     expect(ruleKeys, 'firestore.rules defines reservationFields()').not.toBeNull();
     expect(sorted(RESERVATION_FIELDS)).toEqual(ruleKeys);
     expect(sorted(Object.keys(reservationData({ slotId: SLOT_ID, uid: VISITOR_UID, createdAt: 1 })))).toEqual(ruleKeys);
 
-    expect(h.batches).toHaveLength(1);
-    const [batch] = h.batches;
-    expect(batch.set).toHaveBeenCalledTimes(1);
-    const [reservationRef, payload] = batch.set.mock.calls[0];
+    expect(h.batches).toHaveLength(0);
+    expect(h.transactions).toHaveLength(1);
+    const [transaction] = h.transactions;
+    expect(transaction.get).toHaveBeenCalledWith({ path: `slots/${SLOT_ID}`, id: SLOT_ID });
+    expect(transaction.set).toHaveBeenCalledTimes(1);
+    const [reservationRef, payload] = transaction.set.mock.calls[0];
     expect(reservationRef.path).toBe(`reservations/${reservationRef.id}`);
     expect(sorted(Object.keys(payload))).toEqual(ruleKeys);
     expect(payload).toMatchObject({
@@ -376,11 +385,11 @@ describe('write payloads match the key lists in firestore.rules', () => {
       status: 'confirmed',
     });
     expect(payload.created_at).toBe(h.serverTs);
-    expect(batch.update).toHaveBeenCalledWith(
+    expect(transaction.update).toHaveBeenCalledTimes(1);
+    expect(transaction.update).toHaveBeenCalledWith(
       { path: `slots/${SLOT_ID}`, id: SLOT_ID },
       { is_available: false, reservation_id: reservationRef.id }
     );
-    expect(batch.commit).toHaveBeenCalledTimes(1);
     expect(addDoc).not.toHaveBeenCalledWith({ type: 'collection', path: 'reservations' }, expect.anything());
   });
 

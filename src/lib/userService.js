@@ -1,6 +1,6 @@
 import { auth, db, getSignedInUser } from './firebase';
 import { signInAnonymously } from 'firebase/auth';
-import { collection, doc, getDoc, setDoc, updateDoc, query, where, getDocs, orderBy, deleteDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, setDoc, query, where, getDocs, orderBy, writeBatch } from 'firebase/firestore';
 import { sendCancellationEmail } from './emailService';
 
 // Visitor sessions (docs/auth-model.md). The visitor's identity is their
@@ -214,14 +214,15 @@ export async function cancelReservation(reservationId, cancellationReason = 'Use
       }
     }
     
-    // Delete the reservation
-    await deleteDoc(reservationRef);
-    
-    // Reset the slot availability
+    // Delete the reservation and release the slot in one write: the rules
+    // only accept the two together (docs/auth-model.md).
+    const batch = writeBatch(db);
+    batch.delete(reservationRef);
     if (reservation.slot_id) {
       const slotRef = doc(db, 'slots', reservation.slot_id);
-      await updateDoc(slotRef, { is_available: true });
+      batch.update(slotRef, { is_available: true, reservation_id: null });
     }
+    await batch.commit();
     
     // Send cancellation email
     if (reservation) {
