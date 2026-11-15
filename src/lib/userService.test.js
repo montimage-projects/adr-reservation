@@ -33,6 +33,7 @@ vi.mock('firebase/firestore', () => ({
   getDoc: vi.fn(),
   getDocs: vi.fn(),
   addDoc: vi.fn(),
+  setDoc: vi.fn(),
   updateDoc: vi.fn(),
   deleteDoc: vi.fn(),
   query: vi.fn((ref) => ref),
@@ -51,7 +52,7 @@ vi.mock('./emailService', () => ({
 }));
 
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
-import { addDoc, getDocs } from 'firebase/firestore';
+import { getDoc, setDoc } from 'firebase/firestore';
 import { startAnonymousSession } from './firebase';
 import { getCurrentUser, isUserAuthenticated, logoutUser, registerUser } from './userService';
 
@@ -62,8 +63,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   fakeAuth.currentUser = null;
   localStorage.clear();
-  getDocs.mockResolvedValue({ empty: true, docs: [] });
-  addDoc.mockResolvedValue({ id: 'profile-1' });
+  getDoc.mockResolvedValue({ exists: () => false });
+  setDoc.mockResolvedValue(undefined);
 });
 
 describe('anonymous sign-in bootstrap', () => {
@@ -101,7 +102,13 @@ describe('visitor session', () => {
     expect(result.token).toBeUndefined();
     expect(signInAnonymously).toHaveBeenCalledWith(fakeAuth);
     expect(signInAnonymously.mock.invocationCallOrder[0])
-      .toBeLessThan(addDoc.mock.invocationCallOrder[0]);
+      .toBeLessThan(setDoc.mock.invocationCallOrder[0]);
+    // The profile is keyed by the visitor's uid (docs/auth-model.md).
+    expect(setDoc).toHaveBeenCalledWith(
+      { path: 'users/anon-uid' },
+      expect.objectContaining({ email: 'ada@example.com' }),
+      { merge: true }
+    );
     await expect(isUserAuthenticated()).resolves.toBe(true);
   });
 

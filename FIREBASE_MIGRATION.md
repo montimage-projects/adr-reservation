@@ -44,48 +44,25 @@ settings are recreated in the new project rather than copied from Supabase.
 
 ## Firestore Security Rules
 
-> **Superseded.** The auth model is decided in
-> [`docs/auth-model.md`](docs/auth-model.md) (issue #5): anonymous Firebase
-> Auth for visitors, email/password for admins, and an `admins/{uid}`
-> allowlist instead of a `role` custom claim. The snippet below is the old
-> draft, kept until #7 rewrites `firestore.rules` to that model.
+The rules live in [`firestore.rules`](firestore.rules) and the indexes in
+[`firestore.indexes.json`](firestore.indexes.json). They follow the auth model
+in [`docs/auth-model.md`](docs/auth-model.md): anonymous Firebase Auth for
+visitors, email/password for admins, and an `admins/{uid}` allowlist. Deploy
+both with:
 
-Set up appropriate security rules in your Firebase console. Here's a starting point:
+```bash
+firebase deploy --only firestore:rules,firestore:indexes
+```
 
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    // Allow admin access to everything
-    match /{document=**} {
-      allow read, write: if request.auth != null && request.auth.token.role == 'admin';
-    }
-    
-    // Slots collection
-    match /slots/{slotId} {
-      // Anyone can read available slots
-      allow read: if resource.data.is_available == true;
-    }
-    
-    // Reservations collection
-    match /reservations/{reservationId} {
-      // Users can read their own reservations
-      allow read: if request.auth != null && 
-                   resource.data.user_email == request.auth.token.email;
-                   
-      // Anyone can create a reservation (we validate in the application)
-      allow create: if true;
-    }
-    
-    // Users collection
-    match /users/{userId} {
-      // Users can read and write their own data
-      allow read, write: if request.auth != null && 
-                          resource.data.email == request.auth.token.email;
-    }
-  }
-}
-```
+Notes for existing data:
+
+- Reservations made before #7 have no `user_uid`, so only admins can see them.
+  Visitors see the reservations made from their own browser.
+- Visitor cancellation is denied until #9 turns it into one batched write
+  (delete the reservation and free the slot together). The rules already
+  accept that batch; admins can still cancel.
+
+See the README's *Testing* section for the emulator tests of these rules.
 
 ## Code Changes
 

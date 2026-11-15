@@ -11,6 +11,7 @@ import {
 } from '@material-tailwind/react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { registerUser, isUserAuthenticated } from '../lib/userService';
+import { MAX_NAME_LENGTH, MAX_EMAIL_LENGTH, MAX_GROUP_ID_LENGTH } from '../lib/validationUtils';
 
 export default function LoginPage() {
   const [formData, setFormData] = useState({
@@ -61,6 +62,19 @@ export default function LoginPage() {
 
     if (!formData.email.includes('@')) {
       setError('Please enter a valid email address');
+      setLoading(false);
+      return;
+    }
+
+    // Same caps as the booking form and firestore.rules
+    if (
+      formData.name.length > MAX_NAME_LENGTH ||
+      formData.email.length > MAX_EMAIL_LENGTH ||
+      formData.groupId.length > MAX_GROUP_ID_LENGTH
+    ) {
+      setError(
+        `Name, email and group ID must be at most ${MAX_NAME_LENGTH}, ${MAX_EMAIL_LENGTH} and ${MAX_GROUP_ID_LENGTH} characters`
+      );
       setLoading(false);
       return;
     }
@@ -125,6 +139,7 @@ export default function LoginPage() {
                     value={formData.name}
                     onChange={handleChange}
                     required
+                    maxLength={MAX_NAME_LENGTH}
                     className="focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:focus:border-blue-400 dark:focus:ring-blue-400 [&>input]:pr-3"
                     containerProps={{
                       className: "min-w-0",
@@ -146,6 +161,7 @@ export default function LoginPage() {
                     value={formData.email}
                     onChange={handleChange}
                     required
+                    maxLength={MAX_EMAIL_LENGTH}
                     className="focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:focus:border-blue-400 dark:focus:ring-blue-400 [&>input]:pr-3"
                     containerProps={{
                       className: "min-w-0",
@@ -165,6 +181,7 @@ export default function LoginPage() {
                     size="lg"
                     value={formData.groupId}
                     onChange={handleChange}
+                    maxLength={MAX_GROUP_ID_LENGTH}
                     className="focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:focus:border-blue-400 dark:focus:ring-blue-400 [&>input]:pr-3"
                     containerProps={{
                       className: "min-w-0",

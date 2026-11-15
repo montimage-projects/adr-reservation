@@ -1,6 +1,6 @@
 // Firebase configuration
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, query, where, orderBy, serverTimestamp, onSnapshot, limit, Timestamp, getCountFromServer } from 'firebase/firestore';
+import { getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, query, where, orderBy, serverTimestamp, onSnapshot, limit, Timestamp, getCountFromServer, writeBatch } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { generateBookingReference } from './emailService';
 
@@ -66,6 +66,12 @@ export async function getAvailableSlots(startDate, endDate) {
 
 export async function createReservation(slotId, userData) {
   try {
+    // The rules bind each reservation to the visitor's Firebase uid.
+    const user = await getSignedInUser();
+    if (!user) {
+      throw new Error('You must be signed in to make a reservation');
+    }
+
     // Generate a unique booking reference
     const bookingReference = generateBookingReference();
     console.log('Generated booking reference:', bookingReference);
@@ -83,13 +89,17 @@ export async function createReservation(slotId, userData) {
       throw new Error('Slot is no longer available');
     }
     
-    // Prepare reservation data
+    // Pre-allocate the reservation ID so the slot update can name it
+    const reservationRef = doc(collection(db, 'reservations'));
+
+    // Prepare reservation data (the keys must match firestore.rules)
     const reservationData = {
       slot_id: slotId,
+      user_uid: user.uid,
       user_name: userData.name,
       user_email: userData.email?.toLowerCase(),
-      group_id: userData.groupId,
-      notes: userData.notes,
+      group_id: userData.groupId ?? '',
+      notes: userData.notes ?? '',
       status: 'confirmed',
       reference: bookingReference,
       created_at: serverTimestamp()
@@ -97,18 +107,19 @@ export async function createReservation(slotId, userData) {
 
     console.log('Reservation data to be saved:', reservationData);
 
-    // Create the reservation in Firestore
-    const reservationsRef = collection(db, 'reservations');
-    const newReservationRef = await addDoc(reservationsRef, reservationData);
-    
-    // Update the slot's availability
-    await updateDoc(slotRef, {
-      is_available: false
+    // Create the reservation and take the slot in one write: the rules only
+    // accept the two together (docs/auth-model.md).
+    const batch = writeBatch(db);
+    batch.set(reservationRef, reservationData);
+    batch.update(slotRef, {
+      is_available: false,
+      reservation_id: reservationRef.id
     });
+    await batch.commit();
     
     // Get the slot data to return with the reservation
     const reservation = {
-      id: newReservationRef.id,
+      id: reservationRef.id,
       ...reservationData,
       slots: {
         id: slotSnap.id,
@@ -273,7 +284,8 @@ export async function resetSlotAvailability(slotId) {
   try {
     const slotRef = doc(db, 'slots', slotId);
     await updateDoc(slotRef, {
-      is_available: true
+      is_available: true,
+      reservation_id: null
     });
     
     const slotSnap = await getDoc(slotRef);
@@ -298,6 +310,7 @@ export async function createSlot(slotData) {
       start_time: toFirestoreTimestamp(slotData.start_time),
       end_time: toFirestoreTimestamp(slotData.end_time),
       is_available: true,
+      reservation_id: null,
       created_at: serverTimestamp()
     };
     
@@ -449,12 +462,20 @@ export async function deleteReservation(reservationId) {
   }
 }
 
-export async function getUserReservationCount(email) {
-  if (!email) {
-    return { success: false, error: 'Email is required to check reservation count' };
-  }
-
+/**
+ * Count the signed-in visitor's confirmed future reservations.
+ *
+ * Reservations are read by owner uid, which the rules can prove
+ * (docs/auth-model.md, "One-reservation limit"). With no signed-in user there
+ * is nothing the visitor owns yet, so the count is 0.
+ */
+export async function getUserReservationCount() {
   try {
+    const user = await getSignedInUser();
+    if (!user) {
+      return { success: true, count: 0, reservations: [] };
+    }
+
     // Get current date in ISO format for comparison
     const now = new Date();
     
@@ -462,7 +483,7 @@ export async function getUserReservationCount(email) {
     const reservationsRef = collection(db, 'reservations');
     const q = query(
       reservationsRef,
-      where('user_email', '==', email.toLowerCase()),
+      where('user_uid', '==', user.uid),
       where('status', '==', 'confirmed')
     );
     
@@ -515,7 +536,7 @@ export async function getUserReservationCount(email) {
       return reservation.slots.start_time > now;
     });
     
-    console.log('Active future reservations for email', email, ':', activeReservations);
+    console.log('Active future reservations:', activeReservations);
 
     return { 
       success: true, 

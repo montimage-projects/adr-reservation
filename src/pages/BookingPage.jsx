@@ -4,7 +4,13 @@ import { createReservation, verifySlotAvailability, getUserReservationCount } fr
 import { registerUser, getCurrentUser } from '../lib/userService'
 import { sendBookingConfirmationEmail } from '../lib/emailService'
 import { checkRateLimit, recordAttempt, formatTimeUntilReset } from '../lib/rateLimiter'
-import { validateBookingForm } from '../lib/validationUtils'
+import {
+  validateBookingForm,
+  MAX_NAME_LENGTH,
+  MAX_EMAIL_LENGTH,
+  MAX_GROUP_ID_LENGTH,
+  MAX_NOTES_LENGTH
+} from '../lib/validationUtils'
 import LoadingSpinner from '../components/LoadingSpinner'
 import Calendar from '../components/calendar/Calendar'
 import SlotSelector from '../components/calendar/SlotSelector'
@@ -152,7 +158,8 @@ export default function BookingPage() {
     if (!email || email.trim() === '') return
     
     try {
-      const result = await getUserReservationCount(email)
+      // Counts the signed-in visitor's own reservations (by Firebase uid)
+      const result = await getUserReservationCount()
       if (result.success) {
         console.log('User reservation count:', result) // Debug log
         setUserReservationCount(result)
@@ -200,7 +207,7 @@ export default function BookingPage() {
         }
         
         // Check if user already has an active reservation
-        const reservationCount = await getUserReservationCount(formData.email)
+        const reservationCount = await getUserReservationCount()
         setUserReservationCount(reservationCount)
         
         if (reservationCount.success && reservationCount.count >= 1) {
@@ -436,6 +443,7 @@ export default function BookingPage() {
                       value={formData.name}
                       onChange={handleInputChange}
                       required
+                      maxLength={MAX_NAME_LENGTH}
                       className={`input ${formErrors.name ? 'border-red-500 dark:border-red-400' : ''}`}
                     />
                     {formErrors.name && (
@@ -453,6 +461,7 @@ export default function BookingPage() {
                       value={formData.email}
                       onChange={handleInputChange}
                       required
+                      maxLength={MAX_EMAIL_LENGTH}
                       className={`input ${formErrors.email ? 'border-red-500 dark:border-red-400' : ''}`}
                     />
                     {formErrors.email && (
@@ -492,6 +501,7 @@ export default function BookingPage() {
                       name="groupId"
                       value={formData.groupId}
                       onChange={handleInputChange}
+                      maxLength={MAX_GROUP_ID_LENGTH}
                       className={`input ${formErrors.groupId ? 'border-red-500 dark:border-red-400' : ''}`}
                     />
                     {formErrors.groupId && (
@@ -509,10 +519,10 @@ export default function BookingPage() {
                       onChange={handleInputChange}
                       rows={3}
                       className={`input ${formErrors.notes ? 'border-red-500 dark:border-red-400' : ''}`}
-                      maxLength={500}
+                      maxLength={MAX_NOTES_LENGTH}
                     />
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      {formData.notes.length}/500 characters
+                      {formData.notes.length}/{MAX_NOTES_LENGTH} characters
                     </p>
                     {formErrors.notes && (
                       <p className="mt-1 text-sm text-red-600 dark:text-red-400">{formErrors.notes}</p>
