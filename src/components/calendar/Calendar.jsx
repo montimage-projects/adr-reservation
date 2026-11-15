@@ -13,7 +13,9 @@ import { isSlotDisabled } from '../../lib/calendarUtils';
 function Calendar({ onSlotSelect, initialSelectedSlot }) {
   const [slots, setSlots] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState(null); // Transient click feedback
+  const [loadError, setLoadError] = useState(null); // Slot fetch failure
+  const [noSlotsAvailable, setNoSlotsAvailable] = useState(false);
   const calendarRef = useRef(null);
   const calendarApiRef = useRef(null);
   const { darkMode } = useTheme();
@@ -24,12 +26,14 @@ function Calendar({ onSlotSelect, initialSelectedSlot }) {
     try {
       const slotsData = await getAvailableSlots(startDate, endDate);
       console.log('Fetched slots:', slotsData);
+      setLoadError(null);
       setSlots(slotsData);
       return slotsData;
     } catch (err) {
       console.error('Error fetching slots:', err);
-      setError('Failed to load available slots. Please try again later.');
-      return [];
+      setLoadError('Unable to load slots. Please try again later.');
+      // Return null (not []) so callers can tell a failure from an empty schedule
+      return null;
     } finally {
       setIsLoading(false);
     }
@@ -48,9 +52,13 @@ function Calendar({ onSlotSelect, initialSelectedSlot }) {
 
       const slotsData = await fetchSlots(startDate, endDate);
 
-      // If no slots found, you might want to indicate this
-      if (!slotsData || slotsData.length === 0) {
-        setError('No slots are available right now. Please check back later.');
+      // A failed fetch already set loadError; don't replace it with the empty notice
+      if (slotsData === null) {
+        return;
+      }
+
+      if (Array.isArray(slotsData) && slotsData.length === 0) {
+        setNoSlotsAvailable(true);
       } else {
         // Find the first available slot
         const firstAvailableSlot = slotsData.find(slot => slot.is_available && !isSlotDisabled(slot.start_time));
@@ -224,9 +232,21 @@ function Calendar({ onSlotSelect, initialSelectedSlot }) {
         </div>
       )}
 
+      {loadError && (
+        <div role="alert" className="mb-4 p-3 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 rounded">
+          {loadError}
+        </div>
+      )}
+
       {error && (
         <div className="mb-4 p-3 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 rounded">
           {error}
+        </div>
+      )}
+
+      {noSlotsAvailable && !loadError && slots.length === 0 && (
+        <div role="status" className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded text-blue-700 dark:text-blue-300">
+          No slots are available right now. Please check back later.
         </div>
       )}
 
