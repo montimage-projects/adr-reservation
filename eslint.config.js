@@ -30,4 +30,11 @@ export default [
       ],
     },
   },
+  {
+    // Tests run in Node (Vitest), so they may use Node globals such as process.
+    files: ['**/*.test.{js,jsx}'],
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.node },
+    },
+  },
 ]
