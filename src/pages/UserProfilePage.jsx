@@ -54,7 +54,7 @@ export default function UserProfilePage() {
 
         // Load user reservations if user is found
         if (userData && userData.email) {
-          const result = await getUserReservations(userData.email);
+          const result = await getUserReservations();
           if (result.success) {
             // Process the reservations data
             const processedReservations = result.reservations.map(reservation => {

@@ -152,7 +152,8 @@ export default function BookingPage() {
     if (!email || email.trim() === '') return
     
     try {
-      const result = await getUserReservationCount(email)
+      // Counts the signed-in visitor's own reservations (by Firebase uid)
+      const result = await getUserReservationCount()
       if (result.success) {
         console.log('User reservation count:', result) // Debug log
         setUserReservationCount(result)
@@ -200,7 +201,7 @@ export default function BookingPage() {
         }
         
         // Check if user already has an active reservation
-        const reservationCount = await getUserReservationCount(formData.email)
+        const reservationCount = await getUserReservationCount()
         setUserReservationCount(reservationCount)
         
         if (reservationCount.success && reservationCount.count >= 1) {

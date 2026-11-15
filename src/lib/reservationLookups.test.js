@@ -2,12 +2,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock only the SDK and side-effect layers. The real ./firebase and
 // ./userService modules run against these fakes.
+const fakeAuth = vi.hoisted(() => ({
+  currentUser: null,
+  authStateReady: () => Promise.resolve(),
+}));
+
 vi.mock('firebase/app', () => ({
   initializeApp: vi.fn(() => ({ name: 'test-app' })),
 }));
 
 vi.mock('firebase/auth', () => ({
-  getAuth: vi.fn(() => ({ currentUser: null, authStateReady: vi.fn(() => Promise.resolve()) })),
+  getAuth: vi.fn(() => fakeAuth),
   onAuthStateChanged: vi.fn(),
   signInAnonymously: vi.fn(),
   signInWithEmailAndPassword: vi.fn(),
@@ -17,10 +22,15 @@ vi.mock('firebase/auth', () => ({
 vi.mock('firebase/firestore', () => ({
   getFirestore: vi.fn(() => ({ name: 'test-db' })),
   collection: vi.fn((db, name) => ({ path: name })),
-  doc: vi.fn((db, name, id) => ({ path: `${name}/${id}` })),
+  // doc(collectionRef) pre-allocates an ID, like the real SDK.
+  doc: vi.fn((db, name, id) =>
+    name === undefined ? { path: `${db.path}/r-new`, id: 'r-new' } : { path: `${name}/${id}`, id }
+  ),
   getDoc: vi.fn(),
   getDocs: vi.fn(),
   addDoc: vi.fn(),
+  setDoc: vi.fn(),
+  writeBatch: vi.fn(),
   updateDoc: vi.fn(),
   deleteDoc: vi.fn(),
   query: vi.fn((ref) => ref),
@@ -38,7 +48,7 @@ vi.mock('./emailService', () => ({
   sendCancellationEmail: vi.fn(),
 }));
 
-import { addDoc, doc, getDoc, getDocs, where } from 'firebase/firestore';
+import { doc, getDoc, getDocs, where, writeBatch } from 'firebase/firestore';
 import { createReservation, db, getReservations, getUserReservationCount } from './firebase';
 import { getUserReservations } from './userService';
 
@@ -87,8 +97,11 @@ const availableSlotSnapshot = {
   data: () => ({ ...slotSnapshot.data(), is_available: true }),
 };
 
+const visitor = { uid: 'visitor-uid', isAnonymous: true };
+
 beforeEach(() => {
   vi.clearAllMocks();
+  fakeAuth.currentUser = visitor;
   vi.spyOn(console, 'log').mockImplementation(() => {});
   vi.spyOn(console, 'error').mockImplementation(() => {});
   vi.mocked(getDocs).mockResolvedValue(querySnapshot([reservationDoc]));
@@ -108,18 +121,38 @@ describe('getReservations', () => {
 
 describe('getUserReservationCount', () => {
   it('counts an existing future reservation', async () => {
-    const result = await getUserReservationCount('User@Example.com');
+    const result = await getUserReservationCount();
 
     expect(result.error).toBeUndefined();
     expect(result.success).toBe(true);
     expect(result.count).toBe(1);
     expect(doc).toHaveBeenCalledWith(db, 'slots', 's1');
   });
+
+  // Replaces the mixed-case email test (#10): the limit now counts by owner
+  // uid, so the case of the typed email no longer matters (#7).
+  it("counts the signed-in visitor's confirmed reservations by uid", async () => {
+    await getUserReservationCount();
+
+    expect(where).toHaveBeenCalledWith('user_uid', '==', 'visitor-uid');
+    expect(where).toHaveBeenCalledWith('status', '==', 'confirmed');
+    expect(where).not.toHaveBeenCalledWith('user_email', expect.anything(), expect.anything());
+  });
+
+  it('returns 0 without querying when no one is signed in', async () => {
+    fakeAuth.currentUser = null;
+
+    const result = await getUserReservationCount();
+
+    expect(result).toEqual({ success: true, count: 0, reservations: [] });
+    expect(where).not.toHaveBeenCalled();
+    expect(getDocs).not.toHaveBeenCalled();
+  });
 });
 
 describe('getUserReservations', () => {
   it('loads user history with slot fields populated', async () => {
-    const result = await getUserReservations('user@example.com');
+    const result = await getUserReservations();
 
     expect(result.error).toBeUndefined();
     expect(result.success).toBe(true);
@@ -129,6 +162,22 @@ describe('getUserReservations', () => {
       start_time: new Date(Math.floor(futureStart.getTime() / 1000) * 1000),
     });
     expect(doc).toHaveBeenCalledWith(db, 'slots', 's1');
+  });
+
+  it("queries the signed-in visitor's reservations by uid", async () => {
+    await getUserReservations();
+
+    expect(where).toHaveBeenCalledWith('user_uid', '==', 'visitor-uid');
+    expect(where).not.toHaveBeenCalledWith('user_email', expect.anything(), expect.anything());
+  });
+
+  it('returns no history without querying when no one is signed in', async () => {
+    fakeAuth.currentUser = null;
+
+    const result = await getUserReservations();
+
+    expect(result).toEqual({ success: true, reservations: [] });
+    expect(where).not.toHaveBeenCalled();
   });
 });
 
@@ -140,35 +189,43 @@ describe('createReservation', () => {
     notes: '',
   };
 
+  let batch;
+
   beforeEach(() => {
     vi.mocked(getDoc).mockResolvedValueOnce(availableSlotSnapshot);
-    vi.mocked(addDoc).mockResolvedValueOnce({ id: 'r-new' });
+    batch = { set: vi.fn(), update: vi.fn(), commit: vi.fn(() => Promise.resolve()) };
+    vi.mocked(writeBatch).mockReturnValue(batch);
   });
 
   it('stores the reservation email lowercased', async () => {
     const reservation = await createReservation('s1', mixedCaseUser);
 
-    expect(addDoc).toHaveBeenCalledWith(
-      { path: 'reservations' },
+    expect(batch.set).toHaveBeenCalledWith(
+      { path: 'reservations/r-new', id: 'r-new' },
       expect.objectContaining({ user_email: 'user@example.com' })
     );
     expect(reservation.user_email).toBe('user@example.com');
   });
 
-  it('counts a mixed-case reservation toward the one-active-reservation limit', async () => {
-    await createReservation('s1', mixedCaseUser);
-    const stored = vi.mocked(addDoc).mock.calls[0][1];
+  it("links the reservation to the visitor's uid and takes the slot in the same batch", async () => {
+    const reservation = await createReservation('s1', mixedCaseUser);
 
-    // Emulate Firestore's exact-match equality filter on user_email.
-    vi.mocked(getDocs).mockImplementationOnce(async () => {
-      const emailFilter = vi.mocked(where).mock.calls.find(([field]) => field === 'user_email');
-      const matches = emailFilter && emailFilter[2] === stored.user_email;
-      return querySnapshot(matches ? [{ id: 'r-new', data: () => stored }] : []);
-    });
+    expect(batch.set).toHaveBeenCalledWith(
+      { path: 'reservations/r-new', id: 'r-new' },
+      expect.objectContaining({ slot_id: 's1', user_uid: 'visitor-uid', status: 'confirmed' })
+    );
+    expect(batch.update).toHaveBeenCalledWith(
+      { path: 'slots/s1', id: 's1' },
+      { is_available: false, reservation_id: 'r-new' }
+    );
+    expect(batch.commit).toHaveBeenCalledTimes(1);
+    expect(reservation.id).toBe('r-new');
+  });
 
-    const result = await getUserReservationCount(mixedCaseUser.email);
+  it('refuses to book without a signed-in user', async () => {
+    fakeAuth.currentUser = null;
 
-    expect(result.success).toBe(true);
-    expect(result.count).toBe(1);
+    await expect(createReservation('s1', mixedCaseUser)).rejects.toThrow('signed in');
+    expect(writeBatch).not.toHaveBeenCalled();
   });
 });

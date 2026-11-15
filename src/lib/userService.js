@@ -1,6 +1,6 @@
 import { auth, db, getSignedInUser } from './firebase';
 import { signInAnonymously } from 'firebase/auth';
-import { collection, doc, getDoc, updateDoc, query, where, getDocs, orderBy, addDoc, deleteDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, setDoc, updateDoc, query, where, getDocs, orderBy, deleteDoc } from 'firebase/firestore';
 import { sendCancellationEmail } from './emailService';
 
 // Visitor sessions (docs/auth-model.md). The visitor's identity is their
@@ -27,7 +27,8 @@ async function ensureSignedIn() {
 }
 
 /**
- * Register a new user or update an existing one
+ * Register a new user or update an existing one. The profile lives at
+ * users/{uid} of the visitor's Firebase user (docs/auth-model.md).
  * @param {Object} userData - User data object
  * @returns {Promise<Object>} - User data with success flag
  */
@@ -38,40 +39,23 @@ export async function registerUser(userData) {
 
     // Normalize email to lowercase
     const email = userData.email.toLowerCase();
-    
-    // Check if user already exists
-    const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('email', '==', email));
-    const querySnapshot = await getDocs(q);
-    
-    let userId;
-    let existingUser = null;
-    
-    if (!querySnapshot.empty) {
-      // User exists, update them
-      existingUser = querySnapshot.docs[0];
-      userId = existingUser.id;
-      
-      const userRef = doc(db, 'users', userId);
-      await updateDoc(userRef, {
-        name: userData.name,
-        group_id: userData.groupId,
-        // Don't update email as it's the primary identifier
-        updated_at: new Date().toISOString()
-      });
-    } else {
-      // Create new user
-      const newUser = {
-        name: userData.name,
-        email: email,
-        group_id: userData.groupId,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-      
-      const docRef = await addDoc(usersRef, newUser);
-      userId = docRef.id;
+
+    const userRef = doc(db, 'users', user.uid);
+    const existing = await getDoc(userRef);
+    const isNewUser = !existing.exists();
+
+    // The keys must match profileFields() in firestore.rules.
+    const now = new Date().toISOString();
+    const profile = {
+      name: userData.name,
+      email,
+      group_id: userData.groupId ?? '',
+      updated_at: now
+    };
+    if (isNewUser) {
+      profile.created_at = now;
     }
+    await setDoc(userRef, profile, { merge: true });
 
     // Remember the details and which Firebase user entered them
     localStorage.setItem(USER_DATA_KEY, JSON.stringify(userData));
@@ -81,8 +65,8 @@ export async function registerUser(userData) {
     return {
       success: true,
       userData,
-      userId,
-      isNewUser: !existingUser
+      userId: user.uid,
+      isNewUser
     };
   } catch (error) {
     console.error('Error registering user:', error);
@@ -91,47 +75,21 @@ export async function registerUser(userData) {
 }
 
 /**
- * Get user information by email
- * @param {string} email - User email
- * @returns {Promise<Object>} - User data
- */
-export async function getUserByEmail(email) {
-  try {
-    // Normalize email to lowercase
-    const normalizedEmail = email.toLowerCase();
-    
-    const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('email', '==', normalizedEmail));
-    const querySnapshot = await getDocs(q);
-    
-    if (querySnapshot.empty) {
-      return { success: false, error: 'User not found' };
-    }
-    
-    const userData = querySnapshot.docs[0].data();
-    userData.id = querySnapshot.docs[0].id; // Add the document ID
-    
-    return { success: true, userData };
-  } catch (error) {
-    console.error('Error getting user:', error);
-    return { success: false, error: error.message };
-  }
-}
-
-/**
- * Get user reservations history
- * @param {string} email - User email
+ * Get the signed-in visitor's reservation history, newest first. Only
+ * reservations made by this Firebase user are readable (docs/auth-model.md).
  * @returns {Promise<Object>} - User reservations
  */
-export async function getUserReservations(email) {
+export async function getUserReservations() {
   try {
-    // Normalize email to lowercase
-    const normalizedEmail = email.toLowerCase();
-    
+    const user = await getSignedInUser();
+    if (!user) {
+      return { success: true, reservations: [] };
+    }
+
     const reservationsRef = collection(db, 'reservations');
     const q = query(
       reservationsRef, 
-      where('user_email', '==', normalizedEmail),
+      where('user_uid', '==', user.uid),
       orderBy('created_at', 'desc')
     );
     
