@@ -23,6 +23,17 @@ describe('validateEmail', () => {
   it('rejects an address without a domain', () => {
     expect(validateEmail('user@')).toMatchObject({ success: false, field: 'email' });
   });
+
+  // The cap matches firestore.rules (#7).
+  it('accepts 254 characters and rejects 255', () => {
+    const address = (length) => `${'a'.repeat(length - '@example.com'.length)}@example.com`;
+    expect(validateEmail(address(254))).toEqual({ success: true });
+    expect(validateEmail(address(255))).toMatchObject({
+      success: false,
+      error: 'Email must be at most 254 characters',
+      field: 'email',
+    });
+  });
 });
 
 describe('validateName', () => {
@@ -37,6 +48,15 @@ describe('validateName', () => {
     });
   });
 
+  it('accepts 200 characters and rejects 201', () => {
+    expect(validateName('a'.repeat(200))).toEqual({ success: true });
+    expect(validateName('a'.repeat(201))).toMatchObject({
+      success: false,
+      error: 'Name must be at most 200 characters',
+      field: 'name',
+    });
+  });
+
   it('rejects digits and symbols', () => {
     expect(validateName('R2-D2')).toMatchObject({
       success: false,
@@ -48,6 +68,15 @@ describe('validateName', () => {
 describe('validateGroupId', () => {
   it('treats an empty group ID as valid because it is optional', () => {
     expect(validateGroupId('')).toEqual({ success: true });
+  });
+
+  it('accepts 100 characters and rejects 101', () => {
+    expect(validateGroupId('g'.repeat(100))).toEqual({ success: true });
+    expect(validateGroupId('g'.repeat(101))).toMatchObject({
+      success: false,
+      error: 'Group ID must be at most 100 characters',
+      field: 'groupId',
+    });
   });
 
   it('rejects characters outside letters, digits, hyphen and underscore', () => {

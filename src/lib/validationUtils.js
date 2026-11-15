@@ -2,6 +2,12 @@
  * Validation utilities for user input
  */
 
+// Length caps, also enforced by firestore.rules (keep the two in sync).
+export const MAX_NAME_LENGTH = 200;
+export const MAX_EMAIL_LENGTH = 254;
+export const MAX_GROUP_ID_LENGTH = 100;
+export const MAX_NOTES_LENGTH = 500;
+
 /**
  * Validate an email address
  * @param {string} email - Email address to validate
@@ -10,6 +16,10 @@
 export function validateEmail(email) {
   if (!email || email.trim() === '') {
     return { success: false, error: 'Email is required', field: 'email' };
+  }
+
+  if (email.length > MAX_EMAIL_LENGTH) {
+    return { success: false, error: `Email must be at most ${MAX_EMAIL_LENGTH} characters`, field: 'email' };
   }
   
   // Basic email format validation
@@ -35,6 +45,10 @@ export function validateName(name) {
   if (name.trim().length < 2) {
     return { success: false, error: 'Name must be at least 2 characters', field: 'name' };
   }
+
+  if (name.length > MAX_NAME_LENGTH) {
+    return { success: false, error: `Name must be at most ${MAX_NAME_LENGTH} characters`, field: 'name' };
+  }
   
   // Name should not contain special characters except for spaces, hyphens, and apostrophes
   const nameRegex = /^[a-zA-Z\s'-]+$/;
@@ -53,6 +67,10 @@ export function validateName(name) {
 export function validateGroupId(groupId) {
   if (!groupId || groupId.trim() === '') {
     return { success: true }; // Group ID is optional
+  }
+
+  if (groupId.length > MAX_GROUP_ID_LENGTH) {
+    return { success: false, error: `Group ID must be at most ${MAX_GROUP_ID_LENGTH} characters`, field: 'groupId' };
   }
   
   // Group ID should be alphanumeric with optional hyphens and underscores
@@ -75,7 +93,7 @@ export function validateNotes(notes) {
   }
   
   // Notes should not be too long (limit to 500 characters)
-  if (notes.length > 500) {
+  if (notes.length > MAX_NOTES_LENGTH) {
     return { success: false, error: 'Notes must be less than 500 characters', field: 'notes' };
   }
   
